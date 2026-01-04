@@ -1,0 +1,50 @@
+name: Australian Legal Intelligence Briefing
+
+on:
+  schedule:
+    # Run at 6:00 AM AEST (Mon-Fri)
+    # AEST is UTC+10, so 6 AM AEST = 8 PM UTC (previous day)
+    # Adjust based on daylight saving (AEDT is UTC+11)
+    - cron: '0 20 * * 0-4'  # 6 AM AEST Mon-Fri (UTC 8 PM Sun-Thu)
+  
+  workflow_dispatch:  # Allow manual trigger for testing
+
+jobs:
+  generate-briefing:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Generate Australian legal briefing
+      env:
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+      run: |
+        python agent.py
+    
+    - name: Upload briefing artifact
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: daily-briefing-${{ github.run_number }}
+        path: |
+          briefing*.txt
+        retention-days: 90
+    
+    - name: Display briefing summary
+      if: success()
+      run: |
+        echo "Briefing generated successfully!"
+        echo "Check the uploaded artifacts to download the full briefing."

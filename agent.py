@@ -10,51 +10,64 @@ import traceback
 
 def fetch_asic_insolvency_notices():
     """
-    Fetch recent ASIC insolvency notices from the public website
+    Fetch recent ASIC insolvency notices
     """
     notices = []
     try:
-        url = "https://insolvencynotices.asic.gov.au/browsesearch-notices/"
+        # Try the main search page
+        url = "https://insolvencynotices.asic.gov.au/browsesearch-notices/notice-search"
         
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-AU,en;q=0.9',
         }
         
-        response = requests.get(url, headers=headers, timeout=15)
+        # Try GET first, then POST if that fails
+        response = requests.get(url, headers=headers, timeout=15, allow_redirects=True)
+        
+        print(f"  ASIC Insolvency Status: HTTP {response.status_code}")
         
         if response.status_code == 200:
             soup = BeautifulSoup(response.content, 'html.parser')
             
-            page_text = soup.get_text()
-            if 'notice' in page_text.lower() or 'insolvency' in page_text.lower():
-                notices.append({
-                    'status': 'ASIC Insolvency Notices page accessible',
-                    'note': 'Page loaded successfully - would need detailed parsing for specific notices',
-                    'url': url
-                })
-            else:
-                notices.append({
-                    'status': 'Page loaded but structure unknown',
-                    'url': url
-                })
+            # Look for notice listings
+            notice_rows = soup.find_all(['tr', 'div'], class_=re.compile(r'notice|result|item'))
             
-            print(f"✓ ASIC Insolvency page accessed (HTTP {response.status_code})")
+            for row in notice_rows[:15]:
+                text = row.get_text(strip=True)
+                if len(text) > 30:
+                    notices.append({
+                        'text': text[:300],
+                        'source': 'ASIC Insolvency Notices'
+                    })
+            
+            if notices:
+                print(f"  ✓ Found {len(notices)} insolvency notices")
+            else:
+                # Even if we can't parse notices, note the page is accessible
+                notices = [{
+                    'status': 'Page accessible - requires specific search parameters',
+                    'url': url,
+                    'note': 'Manual configuration needed for date range searches'
+                }]
+                print(f"  ⚠ Page accessible but needs search configuration")
         else:
-            notices.append({
+            notices = [{
                 'status': f'HTTP {response.status_code}',
-                'url': url
-            })
-            print(f"⚠ ASIC Insolvency returned HTTP {response.status_code}")
+                'url': url,
+                'note': 'May require session cookies or CAPTCHA'
+            }]
             
     except Exception as e:
-        print(f"✗ ASIC Insolvency error: {str(e)[:100]}")
+        print(f"  ✗ ASIC Insolvency error: {str(e)[:100]}")
         notices = [{'error': str(e)[:200], 'source': 'ASIC Insolvency'}]
     
-    return notices if notices else [{'note': 'No data retrieved'}]
+    return notices
 
 def fetch_asic_company_announcements():
     """
-    Fetch ASIC media releases
+    Fetch ASIC media releases with better parsing
     """
     announcements = []
     
@@ -62,73 +75,136 @@ def fetch_asic_company_announcements():
         url = "https://asic.gov.au/about-asic/news-centre/find-a-media-release/"
         
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-AU,en;q=0.9',
         }
         
-        response = requests.get(url, headers=headers, timeout=15)
+        response = requests.get(url, headers=headers, timeout=15, allow_redirects=True)
+        
+        print(f"  ASIC Media Status: HTTP {response.status_code}")
         
         if response.status_code == 200:
             soup = BeautifulSoup(response.content, 'html.parser')
             
-            links = soup.find_all('a', limit=20)
+            # Try multiple selectors
+            article_elements = (
+                soup.find_all('article') or 
+                soup.find_all('div', class_=re.compile(r'media|release|news|item')) or
+                soup.find_all('li', class_=re.compile(r'media|release|news'))
+            )
             
-            for link in links:
-                text = link.get_text(strip=True)
-                href = link.get('href', '')
+            for article in article_elements[:15]:
+                # Look for titles/headings
+                title_elem = (
+                    article.find('h2') or 
+                    article.find('h3') or 
+                    article.find('h4') or
+                    article.find('a', class_=re.compile(r'title|heading'))
+                )
                 
-                if 'media-release' in href.lower() or len(text) > 30:
-                    if any(keyword in text.lower() for keyword in ['release', 'asic', '202']):
+                if title_elem:
+                    title = title_elem.get_text(strip=True)
+                    if len(title) > 20:
+                        # Try to find date
+                        date_elem = article.find('time') or article.find(class_=re.compile(r'date|time'))
+                        date_str = date_elem.get_text(strip=True) if date_elem else 'Date unknown'
+                        
                         announcements.append({
-                            'title': text[:200],
-                            'source': 'ASIC'
+                            'title': title[:250],
+                            'date': date_str[:50],
+                            'source': 'ASIC Media Release'
                         })
             
             if announcements:
-                print(f"✓ Found {len(announcements)} ASIC items")
+                print(f"  ✓ Found {len(announcements)} ASIC media releases")
             else:
-                announcements = [{'status': 'ASIC page accessed', 'url': url}]
-                print(f"✓ ASIC page accessed (HTTP {response.status_code})")
+                # Try to get any links
+                all_links = soup.find_all('a', href=re.compile(r'media-release|news'))[:10]
+                for link in all_links:
+                    text = link.get_text(strip=True)
+                    if len(text) > 20:
+                        announcements.append({
+                            'title': text[:250],
+                            'source': 'ASIC'
+                        })
+                
+                if announcements:
+                    print(f"  ✓ Found {len(announcements)} ASIC items via links")
+                else:
+                    announcements = [{'status': 'Page accessible', 'url': url, 'note': 'HTML structure may have changed'}]
+                    print(f"  ⚠ Page accessible but content structure changed")
         else:
             announcements = [{'status': f'HTTP {response.status_code}', 'url': url}]
-            print(f"⚠ ASIC returned HTTP {response.status_code}")
         
     except Exception as e:
-        print(f"✗ ASIC announcements error: {str(e)[:100]}")
+        print(f"  ✗ ASIC announcements error: {str(e)[:100]}")
         announcements = [{'error': str(e)[:200]}]
     
-    return announcements if announcements else [{'note': 'No data retrieved'}]
+    return announcements
 
 def fetch_federal_court_notices():
     """
-    Fetch Federal Court info
+    Fetch Federal Court recent judgments
     """
     filings = []
     
     try:
-        url = "https://www.fedcourt.gov.au/"
+        # Try the judgments search page
+        url = "https://www.fedcourt.gov.au/digital-law-library/judgments/search"
         
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         }
         
-        response = requests.get(url, headers=headers, timeout=15)
+        response = requests.get(url, headers=headers, timeout=15, allow_redirects=True)
+        
+        print(f"  Federal Court Status: HTTP {response.status_code}")
         
         if response.status_code == 200:
-            filings = [{'status': 'Federal Court website accessible', 'url': url}]
-            print(f"✓ Federal Court page accessed")
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            # Look for case listings
+            case_links = soup.find_all('a', href=re.compile(r'/judgment/|/case/'))[:15]
+            
+            for link in case_links:
+                text = link.get_text(strip=True)
+                if len(text) > 15:
+                    filings.append({
+                        'case': text[:300],
+                        'url': link.get('href', '')[:200],
+                        'source': 'Federal Court'
+                    })
+            
+            if filings:
+                print(f"  ✓ Found {len(filings)} Federal Court cases")
+            else:
+                filings = [{
+                    'status': 'Page accessible',
+                    'url': url,
+                    'note': 'Configure search parameters for specific practice areas'
+                }]
+                print(f"  ⚠ Page accessible but needs search config")
+        elif response.status_code == 403:
+            filings = [{
+                'status': 'HTTP 403 - Access Forbidden',
+                'note': 'May require IP whitelisting or different access method',
+                'alternative': 'Try AustLII for Federal Court cases'
+            }]
+            print(f"  ✗ Federal Court blocked (403)")
         else:
             filings = [{'status': f'HTTP {response.status_code}', 'url': url}]
-            print(f"⚠ Federal Court returned HTTP {response.status_code}")
         
     except Exception as e:
-        print(f"✗ Federal Court error: {str(e)[:100]}")
+        print(f"  ✗ Federal Court error: {str(e)[:100]}")
         filings = [{'error': str(e)[:200]}]
     
-    return filings if filings else [{'note': 'No data retrieved'}]
+    return filings
 
 def fetch_accc_enforcement():
     """
-    Monitor ACCC enforcement actions
+    Fetch ACCC media releases with better error handling
     """
     enforcement = []
     
@@ -136,68 +212,71 @@ def fetch_accc_enforcement():
         url = "https://www.accc.gov.au/media-releases"
         
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         }
         
-        response = requests.get(url, headers=headers, timeout=15)
+        response = requests.get(url, headers=headers, timeout=15, allow_redirects=True)
+        
+        print(f"  ACCC Status: HTTP {response.status_code}")
         
         if response.status_code == 200:
             soup = BeautifulSoup(response.content, 'html.parser')
             
-            links = soup.find_all('a', limit=30)
+            # Try multiple selectors for media releases
+            items = (
+                soup.find_all('article') or
+                soup.find_all('div', class_=re.compile(r'media|release|news')) or
+                soup.find_all('li')
+            )
             
-            for link in links:
-                text = link.get_text(strip=True)
-                if len(text) > 20:
-                    if any(keyword in text.lower() for keyword in ['court', 'penalty', 'action', 'proceeding']):
-                        enforcement.append({
-                            'title': text[:200],
-                            'source': 'ACCC'
-                        })
+            for item in items[:30]:
+                title_elem = item.find(['h2', 'h3', 'h4', 'a'])
+                if title_elem:
+                    text = title_elem.get_text(strip=True)
+                    if len(text) > 20:
+                        # Filter for enforcement content
+                        if any(keyword in text.lower() for keyword in 
+                            ['court', 'penalty', 'action', 'proceeding', 'fine', 'breach', 'investigation', 'enforcement']):
+                            enforcement.append({
+                                'title': text[:250],
+                                'source': 'ACCC Enforcement'
+                            })
+                        elif len(enforcement) < 5:  # Include some general releases too
+                            enforcement.append({
+                                'title': text[:250],
+                                'source': 'ACCC'
+                            })
             
             if enforcement:
-                print(f"✓ Found {len(enforcement)} ACCC enforcement items")
+                print(f"  ✓ Found {len(enforcement)} ACCC items")
             else:
-                enforcement = [{'status': 'ACCC page accessed', 'url': url}]
-                print(f"✓ ACCC page accessed")
+                enforcement = [{'status': 'Page accessible', 'url': url, 'note': 'Content structure changed'}]
+                print(f"  ⚠ ACCC page accessible but content not parsed")
+        elif response.status_code == 404:
+            enforcement = [{
+                'status': 'HTTP 404 - URL may have changed',
+                'try_instead': 'https://www.accc.gov.au/about-us/media'
+            }]
+            print(f"  ✗ ACCC 404 - URL changed")
         else:
             enforcement = [{'status': f'HTTP {response.status_code}', 'url': url}]
-            print(f"⚠ ACCC returned HTTP {response.status_code}")
         
     except Exception as e:
-        print(f"✗ ACCC error: {str(e)[:100]}")
+        print(f"  ✗ ACCC error: {str(e)[:100]}")
         enforcement = [{'error': str(e)[:200]}]
     
-    return enforcement if enforcement else [{'note': 'No data retrieved'}]
+    return enforcement
 
-def fetch_asx_announcements():
+def fetch_austlii_federal_court():
     """
-    ASX announcements - limited free access
-    """
-    announcements = []
-    
-    try:
-        announcements = [{
-            'note': 'ASX price-sensitive announcements require market data subscription',
-            'recommendation': 'Consider: IRESS, Morningstar, or direct ASX data feed',
-            'free_alternative': 'Monitor specific company pages or set up Google Finance alerts'
-        }]
-        print("ℹ ASX data requires subscription")
-        
-    except Exception as e:
-        print(f"✗ ASX error: {str(e)[:100]}")
-        announcements = [{'error': str(e)[:200]}]
-    
-    return announcements
-
-def fetch_austlii_cases():
-    """
-    Search AustLII for recent cases
+    Fetch recent Federal Court cases from AustLII (free alternative)
     """
     cases = []
     
     try:
-        url = "http://www.austlii.edu.au/"
+        # Recent FCA cases
+        url = "http://www8.austlii.edu.au/cgi-bin/viewdb/au/cases/cth/FCA/2025/"
         
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
@@ -205,27 +284,66 @@ def fetch_austlii_cases():
         
         response = requests.get(url, headers=headers, timeout=15)
         
+        print(f"  AustLII FCA Status: HTTP {response.status_code}")
+        
         if response.status_code == 200:
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            # Find case links
+            case_links = soup.find_all('a', href=re.compile(r'\d+\.html'))[:20]
+            
+            for link in case_links:
+                case_name = link.get_text(strip=True)
+                if len(case_name) > 10:
+                    cases.append({
+                        'case': case_name[:300],
+                        'court': 'Federal Court of Australia',
+                        'source': 'AustLII',
+                        'year': '2025'
+                    })
+            
+            if cases:
+                print(f"  ✓ Found {len(cases)} recent FCA cases on AustLII")
+            else:
+                # Try 2024 cases
+                url_2024 = "http://www8.austlii.edu.au/cgi-bin/viewdb/au/cases/cth/FCA/2024/"
+                response_2024 = requests.get(url_2024, headers=headers, timeout=15)
+                
+                if response_2024.status_code == 200:
+                    soup_2024 = BeautifulSoup(response_2024.content, 'html.parser')
+                    case_links_2024 = soup_2024.find_all('a', href=re.compile(r'\d+\.html'))[-15:]  # Last 15 from 2024
+                    
+                    for link in case_links_2024:
+                        case_name = link.get_text(strip=True)
+                        if len(case_name) > 10:
+                            cases.append({
+                                'case': case_name[:300],
+                                'court': 'Federal Court of Australia',
+                                'source': 'AustLII',
+                                'year': '2024 (recent)'
+                            })
+                    
+                    if cases:
+                        print(f"  ✓ Found {len(cases)} late 2024 FCA cases on AustLII")
+        
+        if not cases:
             cases = [{
                 'status': 'AustLII accessible',
-                'note': 'Free legal database - configure specific court searches',
-                'databases': ['FCA', 'NSWSC', 'VSC', 'QSC'],
-                'url': url
+                'note': 'Free legal database - configure for specific searches',
+                'databases': ['FCA 2025', 'FCA 2024', 'NSWSC', 'VSC', 'QSC'],
+                'url': 'http://www.austlii.edu.au'
             }]
-            print(f"✓ AustLII accessed")
-        else:
-            cases = [{'status': f'HTTP {response.status_code}', 'url': url}]
-            print(f"⚠ AustLII returned HTTP {response.status_code}")
+            print(f"  ⚠ AustLII accessible but needs configuration")
         
     except Exception as e:
-        print(f"✗ AustLII error: {str(e)[:100]}")
-        cases = [{'error': str(e)[:200]}]
+        print(f"  ✗ AustLII error: {str(e)[:100]}")
+        cases = [{'error': str(e)[:200], 'source': 'AustLII'}]
     
-    return cases if cases else [{'note': 'No data retrieved'}]
+    return cases
 
 def fetch_abc_news_business():
     """
-    Fetch ABC News Business
+    Fetch ABC News Business with better parsing
     """
     news = []
     
@@ -238,34 +356,53 @@ def fetch_abc_news_business():
         
         response = requests.get(url, headers=headers, timeout=15)
         
+        print(f"  ABC News Status: HTTP {response.status_code}")
+        
         if response.status_code == 200:
             soup = BeautifulSoup(response.content, 'html.parser')
             
-            links = soup.find_all('a', limit=30)
+            # Try various selectors
+            articles = (
+                soup.find_all('article') or
+                soup.find_all('div', class_=re.compile(r'article|story|item')) or
+                soup.find_all('a', class_=re.compile(r'article|story'))
+            )
             
-            for link in links:
-                text = link.get_text(strip=True)
-                if len(text) > 20:
+            for article in articles[:40]:
+                # Find headline
+                headline_elem = (
+                    article.find('h3') or 
+                    article.find('h2') or 
+                    article.find('h4') or
+                    article
+                )
+                
+                text = headline_elem.get_text(strip=True)
+                
+                # Filter for business/legal keywords
+                if len(text) > 25:
                     if any(keyword in text.lower() for keyword in 
-                        ['company', 'court', 'asic', 'accc', 'administration', 'bankruptcy', 'lawsuit']):
+                        ['company', 'companies', 'court', 'asic', 'accc', 'administration', 
+                         'liquidat', 'bankrupt', 'lawsuit', 'regulator', 'fine', 'investigation',
+                         'corporate', 'business', 'asx', 'shares', 'market']):
                         news.append({
-                            'headline': text[:200],
-                            'source': 'ABC News'
+                            'headline': text[:300],
+                            'source': 'ABC News Business'
                         })
             
             if news:
-                print(f"✓ Found {len(news)} ABC news items")
+                print(f"  ✓ Found {len(news)} ABC business news items")
             else:
-                print(f"✓ ABC News accessed (no matching items)")
+                print(f"  ⚠ ABC News page accessible but no matching items")
         
     except Exception as e:
-        print(f"⚠ ABC News error: {str(e)[:100]}")
+        print(f"  ⚠ ABC News error: {str(e)[:100]}")
     
     return news
 
 def generate_briefing():
     """
-    Collect all data and generate briefing using Claude
+    Collect all data and generate briefing
     """
     print("\n" + "="*70)
     print("COLLECTING AUSTRALIAN LEGAL INTELLIGENCE DATA")
@@ -288,12 +425,8 @@ def generate_briefing():
     accc_enforcement = fetch_accc_enforcement()
     time.sleep(1)
     
-    print("Fetching ASX announcements...")
-    asx_announcements = fetch_asx_announcements()
-    time.sleep(1)
-    
-    print("Fetching AustLII cases...")
-    austlii_cases = fetch_austlii_cases()
+    print("Fetching AustLII Federal Court cases...")
+    austlii_cases = fetch_austlii_federal_court()
     time.sleep(1)
     
     print("Fetching ABC News business...")
@@ -302,6 +435,13 @@ def generate_briefing():
     print("\n" + "="*70)
     print("DATA COLLECTION COMPLETE")
     print("="*70 + "\n")
+    
+    # ASX note
+    asx_note = [{
+        'note': 'ASX price-sensitive announcements require subscription',
+        'options': 'IRESS, Morningstar, Bloomberg, or ASX direct feed',
+        'free_alternative': 'Google Finance alerts for specific ASX codes'
+    }]
     
     # Format data for Claude
     data_summary = f"""
@@ -317,14 +457,14 @@ def generate_briefing():
 === ACCC ENFORCEMENT ACTIONS ===
 {json.dumps(accc_enforcement, indent=2)}
 
-=== ASX ANNOUNCEMENTS ===
-{json.dumps(asx_announcements, indent=2)}
-
-=== AUSTLII RECENT CASES ===
+=== AUSTLII FEDERAL COURT CASES ===
 {json.dumps(austlii_cases, indent=2)}
 
 === ABC NEWS BUSINESS (Context) ===
 {json.dumps(abc_news, indent=2)}
+
+=== ASX ANNOUNCEMENTS ===
+{json.dumps(asx_note, indent=2)}
 """
     
     print("Generating briefing with Claude...")
@@ -333,19 +473,13 @@ def generate_briefing():
     api_key = os.environ.get('ANTHROPIC_API_KEY')
     
     if not api_key:
-        error_msg = "ERROR: ANTHROPIC_API_KEY not found in environment variables"
-        print(error_msg)
-        return error_msg
+        return "ERROR: ANTHROPIC_API_KEY not found"
     
     if not api_key.startswith('sk-ant-'):
-        error_msg = f"ERROR: Invalid API key format. Key starts with: {api_key[:10]}"
-        print(error_msg)
-        return error_msg
+        return f"ERROR: Invalid API key format"
     
-    # Call Claude API
+    # Call Claude
     try:
-        print(f"✓ API Key verified")
-        
         client = anthropic.Anthropic(api_key=api_key)
         
         message = client.messages.create(
@@ -362,32 +496,35 @@ Analyze this data collected from Australian sources on {datetime.now().strftime(
 Provide a comprehensive morning briefing with:
 
 ## EXECUTIVE SUMMARY
-Brief overview (2-3 sentences) of the most significant opportunities and trends.
+Brief overview highlighting the most significant opportunities and trends identified.
 
 ## HIGH-PRIORITY OPPORTUNITIES
-Specific matters worth pursuing. For each, note: company name, jurisdiction, matter type, estimated value, and why it's relevant.
+List specific matters worth pursuing based on the data available. Include:
+- Company names (if mentioned)
+- Matter types
+- Why each is relevant for business development
+- Estimated value indicators (if available)
 
 ## MARKET INTELLIGENCE
-- Industries showing signs of stress
-- Regulatory enforcement trends
-- Notable case law developments
+- Industries showing activity or stress
+- Regulatory enforcement trends from ACCC/ASIC
+- Notable case developments from Federal Court/AustLII
+- Business news context from ABC
 
 ## EMERGING TRENDS
-Identify patterns across industries, insolvency types, regulatory focus areas.
-
-## NEWS CONTEXT
-Relevant business news indicating future legal work.
+Patterns across industries, enforcement areas, or case types.
 
 ## RECOMMENDED ACTIONS
-1. Companies to contact immediately
-2. Matters requiring investigation
-3. Conflicts checks needed
-4. Areas for deeper monitoring
+Prioritized list of immediate actions:
+1. Specific companies/matters to investigate
+2. Conflicts checks needed
+3. Data source improvements needed
+4. Follow-up research required
 
-## DATA QUALITY NOTES
-Brief assessment of which sources provided useful intelligence vs. which need configuration.
+## DATA SOURCE PERFORMANCE
+Assess which sources provided actionable intelligence vs. which need improvement. Be specific about HTTP errors, access issues, or configuration needs.
 
-Be analytical and strategic. Focus on revenue-generating opportunities."""
+Focus on extracting maximum value from available data. If data is limited, provide strategic recommendations for improving collection."""
             }]
         )
         
@@ -396,9 +533,7 @@ Be analytical and strategic. Focus on revenue-generating opportunities."""
         return briefing_text
         
     except Exception as e:
-        error_msg = f"ERROR generating briefing: {str(e)}\n{traceback.format_exc()}"
-        print(error_msg)
-        return error_msg
+        return f"ERROR generating briefing: {str(e)}"
 
 def save_briefing(briefing):
     """
@@ -419,47 +554,33 @@ def save_briefing(briefing):
             f.write("="*70 + "\n\n")
             f.write(briefing)
         
-        print(f"✓ Briefing saved to {filename} and briefing.txt")
+        print(f"✓ Briefing saved")
         return filename
         
     except Exception as e:
-        print(f"✗ Error saving briefing: {str(e)}")
+        print(f"✗ Error saving: {str(e)}")
         return None
 
 if __name__ == "__main__":
     print("\n" + "="*70)
     print("AUSTRALIAN LEGAL INTELLIGENCE AGENT")
     print("="*70)
-    print(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S AEST')}")
+    print(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("="*70 + "\n")
     
     try:
-        # Check for API key
-        if 'ANTHROPIC_API_KEY' in os.environ:
-            api_key = os.environ['ANTHROPIC_API_KEY']
-            print(f"✓ API Key found\n")
-        else:
-            print("✗ WARNING: ANTHROPIC_API_KEY not found\n")
-        
-        # Generate the briefing
         briefing = generate_briefing()
-        
-        # Save to file
         save_briefing(briefing)
         
-        # Print to console
         print("\n" + "="*70)
         print("BRIEFING CONTENT")
         print("="*70 + "\n")
         print(briefing)
         print("\n" + "="*70)
-        print("END OF BRIEFING")
-        print("="*70 + "\n")
         
-        print("✓ Agent completed successfully!")
-        print(f"✓ Finished: {datetime.now().strftime('%Y-%m-%d %H:%M:%S AEST')}\n")
+        print("\n✓ Agent completed successfully!")
         
     except Exception as e:
         print(f"\n✗ FATAL ERROR: {str(e)}")
-        print(traceback.format_exc())
+        traceback.print_exc()
         exit(1)

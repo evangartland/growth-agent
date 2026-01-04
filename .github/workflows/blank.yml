@@ -1,0 +1,155 @@
+your-repo/
+├── .github/workflows/daily-briefing.yml
+├── agent.py
+├── requirements.txt
+└── config.py
+anthropic
+requests
+beautifulsoup4
+python-dotenv
+import anthropic
+import requests
+from datetime import datetime, timedelta
+import os
+import json
+
+def fetch_sec_filings():
+    """Example: Get recent 8-K filings (free SEC API)"""
+    url = "https://efts.sec.gov/LATEST/search-index"
+    headers = {'User-Agent': 'YourFirm legal@yourfirm.com'}
+    
+    params = {
+        'dateRange': 'custom',
+        'startdt': (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d'),
+        'enddt': datetime.now().strftime('%Y-%m-%d'),
+        'forms': '8-K'
+    }
+    
+    try:
+        response = requests.get(url, headers=headers, params=params)
+        return response.json()
+    except:
+        return {"filings": []}
+
+def fetch_legal_news():
+    """Example: Scrape a legal news site or use an API"""
+    # Replace with your actual sources
+    # For now, using a placeholder
+    return {
+        "articles": [
+            "Major antitrust filing against tech company",
+            "New SEC enforcement action in financial services"
+        ]
+    }
+
+def generate_briefing():
+    # Collect data
+    sec_data = fetch_sec_filings()
+    news_data = fetch_legal_news()
+    
+    # Prepare data for Claude
+    data_summary = f"""
+    SEC 8-K Filings (Last 24h): {len(sec_data.get('hits', {}).get('hits', []))} new filings
+    Recent filings include: {json.dumps(sec_data.get('hits', {}).get('hits', [])[:5], indent=2)}
+    
+    Legal News Headlines:
+    {chr(10).join(f"- {article}" for article in news_data.get('articles', []))}
+    """
+    
+    # Call Claude
+    client = anthropic.Anthropic(api_key=os.environ['ANTHROPIC_API_KEY'])
+    
+    message = client.messages.create(
+        model="claude-sonnet-4-20250514",
+        max_tokens=4000,
+        messages=[{
+            "role": "user",
+            "content": f"""You are a legal intelligence analyst for a commercial law firm specializing in disputes and regulatory matters.
+
+Analyze this data from {datetime.now().strftime('%B %d, %Y')}:
+
+{data_summary}
+
+Provide a concise morning briefing with:
+
+## Executive Summary
+[2-3 sentence overview of most significant developments]
+
+## High-Priority Opportunities
+[Ranked list of matters worth pursuing - focus on disputes, regulatory investigations, class actions]
+
+## Emerging Trends
+[Patterns across industries, regulators, or claim types]
+
+## Action Items
+[Specific next steps for business development]
+
+Be specific about company names, amounts, and jurisdictions when available."""
+        }]
+    )
+    
+    return message.content[0].text
+
+def send_email(briefing):
+    """Send via email - using a simple approach"""
+    # Option 1: Use GitHub's notification (prints to logs)
+    print("=== DAILY BRIEFING ===")
+    print(briefing)
+    print("=====================")
+    
+    # Option 2: Use a service like SendGrid, Mailgun, or AWS SES
+    # Uncomment and configure:
+    # import smtplib
+    # ... email sending code
+
+if __name__ == "__main__":
+    briefing = generate_briefing()
+    send_email(briefing)
+    
+    # Save to file for GitHub Actions artifacts
+    with open('briefing.txt', 'w') as f:
+        f.write(f"Briefing for {datetime.now().strftime('%Y-%m-%d')}\n\n")
+        f.write(briefing)
+        name: Daily Legal Briefing
+
+on:
+  schedule:
+    - cron: '0 6 * * 1-5'  # 6 AM UTC, Monday-Friday
+  workflow_dispatch:  # Allows manual trigger for testing
+
+jobs:
+  generate-briefing:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+    
+    - name: Generate briefing
+      env:
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      run: |
+        python agent.py
+    
+    - name: Upload briefing
+      uses: actions/upload-artifact@v3
+      with:
+        name: daily-briefing
+        path: briefing.txt
+    
+    - name: Send to Slack (optional)
+      if: success()
+      env:
+        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+      run: |
+        curl -X POST -H 'Content-type: application/json' \
+        --data "{\"text\":\"$(cat briefing.txt)\"}" \
+        $SLACK_WEBHOOK

@@ -24,7 +24,6 @@ def fetch_asic_insolvency_notices():
         yesterday = (datetime.now() - timedelta(days=1)).strftime('%d/%m/%Y')
         today = datetime.now().strftime('%d/%m/%Y')
         
-        # Note: You may need to adjust this based on ASIC's actual search parameters
         params = {
             'startDate': yesterday,
             'endDate': today
@@ -34,8 +33,6 @@ def fetch_asic_insolvency_notices():
         
         if response.status_code == 200:
             soup = BeautifulSoup(response.content, 'html.parser')
-            # Parse the results - adjust selectors based on actual ASIC HTML structure
-            # This is a placeholder structure
             notice_items = soup.find_all('div', class_='notice-item')[:20]
             
             for item in notice_items:
@@ -44,7 +41,6 @@ def fetch_asic_insolvency_notices():
                     'source': 'ASIC Insolvency Notices'
                 })
         
-        # If the above doesn't work, return sample data structure
         if not notices:
             notices = [{
                 'note': 'ASIC Insolvency Notices require proper authentication/scraping setup',
@@ -69,10 +65,6 @@ def fetch_asic_company_changes():
     changes = []
     
     try:
-        # ASIC Connect API would go here
-        # You'll need to register for API access at: https://asic.gov.au/for-business/
-        
-        # For now, returning structure for what you'd monitor:
         changes = [{
             'type': 'Director Appointments',
             'note': 'Requires ASIC Connect API credentials',
@@ -114,7 +106,6 @@ def fetch_federal_court_notices():
     filings = []
     
     try:
-        # Federal Court of Australia daily digest/cause list
         url = "https://www.fedcourt.gov.au/services/access-to-files-and-transcripts/online-files"
         
         headers = {
@@ -161,7 +152,6 @@ def fetch_accc_enforcement():
         if response.status_code == 200:
             soup = BeautifulSoup(response.content, 'html.parser')
             
-            # Find recent media releases (adjust selectors as needed)
             releases = soup.find_all('article', limit=10)
             
             for release in releases:
@@ -194,9 +184,6 @@ def fetch_asx_announcements():
     announcements = []
     
     try:
-        # ASX announcements would typically require data subscription
-        # or scraping from ASX website
-        
         announcements = [{
             'note': 'ASX Market Announcements - Price Sensitive',
             'focus': [
@@ -223,9 +210,6 @@ def fetch_austlii_cases():
     cases = []
     
     try:
-        # AustLII databases - Federal Court, Supreme Courts
-        # Free resource but requires proper scraping
-        
         databases = [
             'FCA (Federal Court)',
             'NSWSC (NSW Supreme Court)',
@@ -285,9 +269,57 @@ def generate_briefing():
     
     print("Generating briefing with Claude...")
     
+    # Check API key exists
+    api_key = os.environ.get('ANTHROPIC_API_KEY')
+    
+    if not api_key:
+        error_message = f"""
+ERROR: ANTHROPIC_API_KEY NOT FOUND
+==================================
+Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+The ANTHROPIC_API_KEY environment variable is not set.
+
+Please check:
+1. Go to your GitHub repository
+2. Settings → Secrets and variables → Actions
+3. Ensure 'ANTHROPIC_API_KEY' exists and has your Claude API key
+4. The secret name must be exactly 'ANTHROPIC_API_KEY' (case-sensitive)
+
+Data collected:
+{data_summary}
+"""
+        print(error_message)
+        return error_message
+    
+    # Verify API key format
+    if not api_key.startswith('sk-ant-'):
+        error_message = f"""
+ERROR: INVALID API KEY FORMAT
+==============================
+Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+The API key doesn't appear to be valid. Anthropic API keys should start with 'sk-ant-'
+
+Current key starts with: {api_key[:10]}...
+
+Please verify:
+1. You're using your Anthropic API key (not OpenAI or another service)
+2. Get your key from: https://console.anthropic.com/settings/keys
+3. Copy the entire key including the 'sk-ant-' prefix
+
+Data collected:
+{data_summary}
+"""
+        print(error_message)
+        return error_message
+    
     # Call Claude API
     try:
-        client = anthropic.Anthropic(api_key=os.environ['ANTHROPIC_API_KEY'])
+        print(f"API Key found (starts with: {api_key[:15]}...)")
+        print(f"API Key length: {len(api_key)}")
+        
+        client = anthropic.Anthropic(api_key=api_key)
         
         message = client.messages.create(
             model="claude-sonnet-4-20250514",
@@ -330,7 +362,7 @@ Provide a concise morning briefing with:
 
 Be specific about company names, ACNs, amounts, and jurisdictions when available. Flag matters that may require immediate attention.
 
-Note: Some data sources may be placeholder data requiring configuration - focus analysis on available concrete data."""
+Note: Some data sources may be placeholder data requiring configuration - focus analysis on available concrete data and provide strategic recommendations for improving data collection."""
             }]
         )
         
@@ -338,12 +370,50 @@ Note: Some data sources may be placeholder data requiring configuration - focus 
         print("Briefing generated successfully!")
         return briefing_text
         
+    except anthropic.AuthenticationError as e:
+        error_message = f"""
+ERROR: AUTHENTICATION FAILED
+============================
+Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Error: {str(e)}
+
+Your API key was rejected by Anthropic.
+
+Please verify:
+1. The API key is active at: https://console.anthropic.com/settings/keys
+2. You have credits available in your account
+3. You copied the complete key (they're quite long)
+
+Data collected:
+{data_summary}
+"""
+        print(error_message)
+        return error_message
+        
+    except anthropic.RateLimitError as e:
+        error_message = f"""
+ERROR: RATE LIMIT EXCEEDED
+==========================
+Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Error: {str(e)}
+
+You've hit the rate limit for the Anthropic API.
+
+Wait a few minutes and try again.
+
+Data collected:
+{data_summary}
+"""
+        print(error_message)
+        return error_message
+        
     except Exception as e:
         error_message = f"""
 ERROR GENERATING BRIEFING
 ========================
 Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 Error: {str(e)}
+Error Type: {type(e).__name__}
 
 Data collected:
 {data_summary}
@@ -352,6 +422,7 @@ Please check:
 1. ANTHROPIC_API_KEY is set correctly in GitHub Secrets
 2. API key has sufficient credits
 3. Network connectivity
+4. API status at: https://status.anthropic.com/
 """
         print(error_message)
         return error_message
@@ -410,6 +481,13 @@ def send_to_slack(briefing):
 if __name__ == "__main__":
     print("Starting Australian Legal Intelligence Agent...")
     print(f"Current time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    # Check for API key before proceeding
+    if 'ANTHROPIC_API_KEY' in os.environ:
+        api_key = os.environ['ANTHROPIC_API_KEY']
+        print(f"✓ API Key found (starts with: {api_key[:15]}...)")
+    else:
+        print("✗ WARNING: ANTHROPIC_API_KEY not found in environment variables")
     
     # Generate the briefing
     briefing = generate_briefing()

@@ -78,34 +78,3 @@ EXCLUDED_COMPANIES = [
     # Add ACNs or company names of existing clients to avoid conflicts
     # Example: "Client Company Pty Ltd ACN 987654321",
 ]
-```
-
-## 3. `.gitignore` (New File - Important!)
-```
-# Performance and error logs
-source_performance.json
-error_log.txt
-
-# Briefing outputs (optional - remove if you want to track them)
-briefing_*.txt
-briefing.txt
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-venv/
-.env
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db

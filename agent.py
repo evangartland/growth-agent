@@ -10,40 +10,43 @@ import os
 import json
 from bs4 import BeautifulSoup
 import time
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 # Companies to monitor closely (watchlist)
 WATCHLIST_COMPANIES = [
-    # Aussie Broadband
-    # British Solar Renewables
-    # Macquarie Bank
-    # Next DC
-    # Prospa
-    # Wingate
-    # La Salle
-    # Brookfield
-    # Egis
-    # Waveconn
-    # Scentia
-    # Abergeldie Comlex Infrastructure
-    # CPB Contractors
-    # Jacaranda
-    # Team Global Exrpress
-    # St Vincents Health Australia
-    # Northern Star Resoources
-    # Blackstone
-    # KKR
-    # Firefly Metals
-    # Cygnus Metals
-    # Greencross
-    # Bondi Brands
-    # Aula Energy
-    # ContiTech
-    # UGL
-    # David Jones
-    # Independent Reserve
-    # CoinSpot
-    # Asahi
-    # Downer EDI
+    'Aussie Broadband',
+    'British Solar Renewables',
+    'Macquarie Bank',
+    'Next DC',
+    'Prospa',
+    'Wingate',
+    'La Salle',
+    'Brookfield',
+    'Egis',
+    'Waveconn',
+    'Scentia',
+    'Abergeldie Complex Infrastructure',
+    'CPB Contractors',
+    'Jacaranda',
+    'Team Global Express',
+    'St Vincents Health Australia',
+    'Northern Star Resources',
+    'Blackstone',
+    'KKR',
+    'Firefly Metals',
+    'Cygnus Metals',
+    'Greencross',
+    'Bondi Brands',
+    'Aula Energy',
+    'ContiTech',
+    'UGL',
+    'David Jones',
+    'Independent Reserve',
+    'CoinSpot',
+    'Asahi',
+    'Downer EDI'
 ]
 
 # Industries to monitor closely
@@ -190,62 +193,162 @@ def fetch_austlii_recent_cases():
         return {"cases": [], "count": 0, "error": str(e)}
 
 
-def search_legal_news(query="australian legal news insolvency regulatory"):
-    """Search for Australian legal news using public search"""
+def fetch_google_news_rss(query, max_results=10):
+    """Fetch news from Google News RSS feed using direct XML parsing"""
     try:
-        # Using DuckDuckGo HTML search (no API key required)
-        search_url = f"https://html.duckduckgo.com/html/?q={query.replace(' ', '+')}"
+        # Google News RSS URL with Australian localization
+        rss_url = f"https://news.google.com/rss/search?q={query.replace(' ', '+')}&hl=en-AU&gl=AU&ceid=AU:en"
+
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
 
-        response = requests.get(search_url, headers=headers, timeout=10)
+        response = requests.get(rss_url, headers=headers, timeout=15)
         response.raise_for_status()
 
-        soup = BeautifulSoup(response.content, 'html.parser')
-        results = []
+        # Parse XML RSS feed
+        soup = BeautifulSoup(response.content, 'xml')
+        articles = []
 
-        # Find search result links
-        result_links = soup.find_all('a', class_='result__a', limit=10)
+        # Find all item elements in the RSS feed
+        items = soup.find_all('item', limit=max_results)
 
-        for link in result_links[:10]:
-            title = link.get_text(strip=True)
-            if title and len(title) > 10:
-                results.append({
-                    'title': title,
-                    'source': 'Web Search'
+        for item in items:
+            title_elem = item.find('title')
+            pubdate_elem = item.find('pubDate')
+            link_elem = item.find('link')
+
+            if title_elem:
+                articles.append({
+                    'title': title_elem.get_text(strip=True),
+                    'source': 'Google News',
+                    'published': pubdate_elem.get_text(strip=True) if pubdate_elem else 'Recent',
+                    'link': link_elem.get_text(strip=True) if link_elem else ''
                 })
 
-        return {"articles": results, "count": len(results)}
+        return {"articles": articles, "count": len(articles)}
 
     except Exception as e:
-        print(f"Error searching legal news: {e}")
+        print(f"Error fetching Google News for '{query}': {e}")
         return {"articles": [], "count": 0, "error": str(e)}
 
 
+def search_watchlist_companies():
+    """Search for news about ALL watchlist companies using Google News RSS"""
+    company_news = []
+
+    print(f"  Searching for all {len(WATCHLIST_COMPANIES)} watchlist companies...")
+
+    for i, company in enumerate(WATCHLIST_COMPANIES, 1):
+        if company:
+            try:
+                # Search for company news with Australian legal/business context
+                query = f'"{company}" australia (legal OR business OR court OR ASIC OR regulatory OR insolvency)'
+                results = fetch_google_news_rss(query, max_results=5)
+
+                if results.get('count', 0) > 0:
+                    print(f"    [{i}/{len(WATCHLIST_COMPANIES)}] {company}: {results.get('count', 0)} articles")
+                    company_news.extend(results.get('articles', []))
+                else:
+                    print(f"    [{i}/{len(WATCHLIST_COMPANIES)}] {company}: No news")
+
+                time.sleep(0.3)  # Rate limiting - be respectful
+
+            except Exception as e:
+                print(f"    Error searching for {company}: {e}")
+                continue
+
+    return {"articles": company_news, "count": len(company_news)}
+
+
 def fetch_australian_legal_news():
-    """Aggregate Australian legal news from multiple sources"""
+    """Aggregate Australian legal news from multiple sources using Google News RSS"""
     all_news = []
 
-    # Search for general Australian legal news
-    news_results = search_legal_news("australian legal news class action ASIC ACCC")
-    all_news.extend(news_results.get('articles', []))
+    # GENERAL MARKET THEMES (using Google News RSS)
 
-    time.sleep(1)  # Rate limiting
+    # 1. Class actions and litigation
+    print("  - Class actions & litigation...")
+    class_action_results = fetch_google_news_rss("australia class action litigation court", max_results=10)
+    all_news.extend(class_action_results.get('articles', []))
+    time.sleep(0.5)
 
-    # Search for insolvency news
-    insolvency_results = search_legal_news("australian insolvency administration liquidation")
+    # 2. Insolvency and restructuring - EXPANDED
+    print("  - Insolvency & restructuring...")
+    insolvency_results = fetch_google_news_rss("australia insolvency administration liquidation receivership", max_results=10)
     all_news.extend(insolvency_results.get('articles', []))
+    time.sleep(0.5)
 
-    time.sleep(1)  # Rate limiting
+    # 2a. State-based insolvency appointments
+    print("  - State insolvency appointments...")
+    state_insolvency = fetch_google_news_rss("australia appointed administrator receiver liquidator", max_results=8)
+    all_news.extend(state_insolvency.get('articles', []))
+    time.sleep(0.5)
 
-    # Search for regulatory enforcement
-    regulatory_results = search_legal_news("ASIC ACCC enforcement action australia")
-    all_news.extend(regulatory_results.get('articles', []))
+    # 2b. Voluntary administration and DOCA
+    print("  - Voluntary administration...")
+    va_results = fetch_google_news_rss("australia voluntary administration DOCA deed company arrangement", max_results=8)
+    all_news.extend(va_results.get('articles', []))
+    time.sleep(0.5)
+
+    # 3. Supreme Court winding up applications
+    print("  - Supreme Court winding up...")
+    supreme_court_results = fetch_google_news_rss("australia supreme court winding up application", max_results=8)
+    all_news.extend(supreme_court_results.get('articles', []))
+    time.sleep(0.5)
+
+    # 4. ASIC enforcement and regulatory - EXPANDED
+    print("  - ASIC enforcement...")
+    asic_results = fetch_google_news_rss("australia ASIC enforcement investigation regulatory", max_results=10)
+    all_news.extend(asic_results.get('articles', []))
+    time.sleep(0.5)
+
+    # 4a. ASIC banning orders and disqualifications
+    print("  - ASIC bans & disqualifications...")
+    asic_bans = fetch_google_news_rss("australia ASIC banned disqualified director", max_results=8)
+    all_news.extend(asic_bans.get('articles', []))
+    time.sleep(0.5)
+
+    # 5. ACCC and competition law
+    print("  - ACCC & competition...")
+    accc_results = fetch_google_news_rss("australia ACCC enforcement competition consumer", max_results=10)
+    all_news.extend(accc_results.get('articles', []))
+    time.sleep(0.5)
+
+    # 6. Corporate disputes and M&A
+    print("  - Corporate disputes...")
+    corporate_results = fetch_google_news_rss("australia corporate dispute merger acquisition takeover", max_results=10)
+    all_news.extend(corporate_results.get('articles', []))
+    time.sleep(0.5)
+
+    # 7. Director liability and governance - EXPANDED
+    print("  - Director liability...")
+    director_results = fetch_google_news_rss("australia director liability governance breach duty", max_results=8)
+    all_news.extend(director_results.get('articles', []))
+    time.sleep(0.5)
+
+    # 7a. Director resignations
+    print("  - Director resignations...")
+    director_resign = fetch_google_news_rss("australia director resigned stepping down departure", max_results=8)
+    all_news.extend(director_resign.get('articles', []))
+    time.sleep(0.5)
+
+    # 8. Trading while insolvent and phoenix activity
+    print("  - Insolvent trading...")
+    insolvent_trading = fetch_google_news_rss("australia insolvent trading phoenix activity director penalty", max_results=8)
+    all_news.extend(insolvent_trading.get('articles', []))
+    time.sleep(0.5)
+
+    # WATCHLIST COMPANIES (all 31 companies)
+    print("  - Watchlist company news (all 31 companies)...")
+    watchlist_results = search_watchlist_companies()
+    all_news.extend(watchlist_results.get('articles', []))
+
+    print(f"\n  Total articles collected: {len(all_news)}")
 
     return {
-        "articles": all_news[:20],  # Limit to top 20 results
-        "count": len(all_news[:20])
+        "articles": all_news[:120],  # Increased limit to accommodate expanded sources
+        "count": len(all_news[:120])
     }
 
 
@@ -272,9 +375,17 @@ def generate_briefing():
     news_data = fetch_australian_legal_news()
 
     # Prepare data summary for Claude
-    watchlist_str = "\n".join([f"- {company}" for company in WATCHLIST_COMPANIES if company.strip()])
+    watchlist_str = "\n".join([f"- {company}" for company in WATCHLIST_COMPANIES if company])
     industries_str = ", ".join(PRIORITY_INDUSTRIES)
     keywords_str = ", ".join(HIGH_VALUE_KEYWORDS)
+
+    # Debug: Print data collection results
+    print(f"\nData Collection Summary:")
+    print(f"  ASIC releases: {asic_data.get('count', 0)}")
+    print(f"  ACCC releases: {accc_data.get('count', 0)}")
+    print(f"  AustLII cases: {austlii_data.get('count', 0)}")
+    print(f"  News articles: {news_data.get('count', 0)}")
+    print(f"  Total data points: {asic_data.get('count', 0) + accc_data.get('count', 0) + austlii_data.get('count', 0) + news_data.get('count', 0)}\n")
 
     # Format ASIC releases
     asic_releases_str = "\n".join([
@@ -294,10 +405,10 @@ def generate_briefing():
         for c in austlii_data.get('cases', [])[:10]
     ]) or "No recent cases found"
 
-    # Format news articles
+    # Format news articles (showing top 60 out of up to 120 collected)
     news_articles_str = "\n".join([
         f"- {article.get('title', 'No title')}"
-        for article in news_data.get('articles', [])[:15]
+        for article in news_data.get('articles', [])[:60]
     ]) or "No recent legal news found"
 
     data_summary = f"""
@@ -337,31 +448,49 @@ Analyze this data from {datetime.now().strftime('%B %d, %Y')} (Australian source
 
 {data_summary}
 
+IMPORTANT INSTRUCTIONS:
+- Pay special attention to ANY mentions of our watchlist companies
+- Even if data is limited, provide strategic insights based on what IS available
+- Cross-reference news items with our priority industries and keywords
+- Identify potential opportunities even in general legal news
+- If specific company data is scarce, note this and suggest proactive monitoring approaches
+
 Generate a concise morning briefing with:
 
 ## Executive Summary
-[2-3 sentences on most significant Australian legal developments]
+Provide 2-3 sentences highlighting the most significant developments. If limited data, summarize what WAS found and note key gaps requiring further monitoring.
 
 ## High-Priority Opportunities
-[Ranked list of matters worth pursuing - focus on:
- - Class actions
+List specific matters worth pursuing from the data above:
+ - Class actions (existing or potential)
  - ASIC/ACCC regulatory investigations
  - Insolvency and restructuring matters
  - Director liability issues
  - Major commercial disputes
-]
 
-## Watchlist Activity
-[Any mentions or developments related to our monitored companies and industries]
+If no specific opportunities found, suggest areas to monitor based on industry trends.
+
+## Watchlist Company Activity
+Specifically identify ANY mentions of our {len(WATCHLIST_COMPANIES)} watchlist companies.
+Note: Even tangential mentions (industry news affecting these companies) are valuable.
+If none found, state this clearly and suggest targeted monitoring.
+
+## Priority Industry Developments
+Analyze news related to our priority industries: {industries_str}
+Identify potential opportunities or risks in these sectors.
 
 ## Emerging Trends
-[Patterns across Australian industries, regulators (ASIC, ACCC, etc.), or claim types]
+Identify patterns across Australian industries, regulators (ASIC, ACCC, etc.), or claim types.
+Consider broader market conditions affecting our practice areas.
 
 ## Action Items
-[Specific next steps for business development and client engagement]
+Provide specific, actionable next steps:
+ - Companies to research further
+ - Potential clients to contact
+ - Regulatory developments to monitor
+ - Market intelligence to gather
 
-Be specific about company names, amounts, and Australian jurisdictions when available.
-Focus on matters likely to be valuable for a commercial disputes and insolvency practice."""
+Be direct and practical - this briefing drives business development decisions."""
         }]
     )
 
@@ -382,21 +511,105 @@ def save_briefing(briefing_content):
     return filename
 
 
+def send_email(briefing_content, filename):
+    """Send briefing via email"""
+    try:
+        # Get email configuration from environment variables
+        email_to = os.environ.get('EMAIL_TO')
+        email_from = os.environ.get('EMAIL_FROM')
+        email_password = os.environ.get('EMAIL_PASSWORD')
+        smtp_server = os.environ.get('SMTP_SERVER')
+        smtp_port = int(os.environ.get('SMTP_PORT', '587'))
+
+        # Check if email is configured
+        if not all([email_to, email_from, email_password, smtp_server]):
+            print("Email not configured - skipping email send")
+            print(f"  EMAIL_TO: {'✓' if email_to else '✗'}")
+            print(f"  EMAIL_FROM: {'✓' if email_from else '✗'}")
+            print(f"  EMAIL_PASSWORD: {'✓' if email_password else '✗'}")
+            print(f"  SMTP_SERVER: {'✓' if smtp_server else '✗'}")
+            return False
+
+        # Create email message
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = f"Australian Legal Intelligence Briefing - {datetime.now().strftime('%B %d, %Y')}"
+        msg['From'] = email_from
+        msg['To'] = email_to
+
+        # Plain text version
+        text_content = briefing_content
+
+        # HTML version with better formatting
+        html_content = f"""
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                h1 {{ color: #1a1a1a; border-bottom: 2px solid #0066cc; padding-bottom: 10px; }}
+                h2 {{ color: #0066cc; margin-top: 20px; }}
+                ul {{ margin-left: 20px; }}
+                .highlight {{ background-color: #fff3cd; padding: 2px 5px; }}
+                .footer {{ margin-top: 30px; padding-top: 20px; border-top: 1px solid #ccc; font-size: 12px; color: #666; }}
+            </style>
+        </head>
+        <body>
+            <pre style="font-family: Arial, sans-serif; white-space: pre-wrap; word-wrap: break-word;">{briefing_content}</pre>
+            <div class="footer">
+                <p>Australian Legal Intelligence Briefing - Automated Daily Report</p>
+                <p>Generated: {datetime.now().strftime('%B %d, %Y at %H:%M AEST')}</p>
+            </div>
+        </body>
+        </html>
+        """
+
+        # Attach both versions
+        part1 = MIMEText(text_content, 'plain')
+        part2 = MIMEText(html_content, 'html')
+        msg.attach(part1)
+        msg.attach(part2)
+
+        # Send email
+        print(f"Sending email to {email_to}...")
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.starttls()
+            server.login(email_from, email_password)
+            server.send_message(msg)
+
+        print(f"✓ Email sent successfully to {email_to}")
+        return True
+
+    except Exception as e:
+        print(f"✗ Error sending email: {e}")
+        return False
+
+
 if __name__ == "__main__":
     print("Generating Australian Legal Intelligence Briefing...")
     print(f"Monitoring {len([c for c in WATCHLIST_COMPANIES if c.strip()])} companies")
     print(f"Focus industries: {', '.join(PRIORITY_INDUSTRIES[:3])}...")
 
     try:
+        # Generate briefing
         briefing = generate_briefing()
+
+        # Save to file
         filename = save_briefing(briefing)
 
+        # Send via email
+        email_sent = send_email(briefing, filename)
+
+        # Display preview
         print("\n" + "=" * 70)
         print("BRIEFING PREVIEW")
         print("=" * 70)
         print(briefing)
         print("=" * 70)
         print(f"\nBriefing generated successfully: {filename}")
+
+        if email_sent:
+            print("✓ Email delivered successfully")
+        else:
+            print("⚠ Email not sent (check configuration)")
 
     except Exception as e:
         print(f"Error generating briefing: {e}")

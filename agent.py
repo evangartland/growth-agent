@@ -7,77 +7,285 @@ from bs4 import BeautifulSoup
 import time
 import re
 import traceback
+from urllib.parse import quote_plus
+
+def fetch_google_news_by_topic(topic, region='AU', language='en'):
+    """
+    Fetch Google News for a specific legal topic in Australia
+    """
+    articles = []
+    
+    try:
+        # Google News RSS feed
+        query = f"{topic} Australia"
+        encoded_query = quote_plus(query)
+        
+        # Google News RSS URL
+        url = f"https://news.google.com/rss/search?q={encoded_query}&hl={language}&gl={region}&ceid={region}:{language}"
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        
+        response = requests.get(url, headers=headers, timeout=15)
+        
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.content, 'xml')  # Note: 'xml' parser for RSS
+            
+            items = soup.find_all('item')[:10]  # Top 10 results per topic
+            
+            for item in items:
+                title = item.find('title')
+                link = item.find('link')
+                pub_date = item.find('pubDate')
+                source = item.find('source')
+                
+                if title:
+                    article = {
+                        'title': title.get_text(strip=True)[:300],
+                        'link': link.get_text(strip=True) if link else '',
+                        'date': pub_date.get_text(strip=True) if pub_date else '',
+                        'source': source.get_text(strip=True) if source else 'Unknown',
+                        'topic': topic
+                    }
+                    articles.append(article)
+            
+            return articles
+        else:
+            print(f"  ⚠ Google News {topic}: HTTP {response.status_code}")
+            return []
+        
+    except Exception as e:
+        print(f"  ✗ Google News {topic} error: {str(e)[:100]}")
+        return []
+
+def fetch_comprehensive_google_news():
+    """
+    Fetch Google News across all practice areas
+    """
+    print("  Fetching comprehensive Google News coverage...")
+    
+    # Define practice area search terms
+    topics = [
+        # Insolvency & Restructuring
+        "insolvency",
+        "liquidation",
+        "voluntary administration",
+        "receivership",
+        "restructuring",
+        "bankruptcy",
+        "external administration",
+        
+        # Regulatory & Compliance
+        "ASIC enforcement",
+        "ACCC penalty",
+        "AML CTF compliance",
+        "anti-money laundering Australia",
+        "financial services regulation",
+        
+        # Workplace & Employment
+        "workplace safety prosecution",
+        "unfair dismissal",
+        "employment law dispute",
+        "redundancies Australia",
+        "WorkCover prosecution",
+        "Fair Work Commission",
+        
+        # Litigation & Disputes
+        "class action Australia",
+        "commercial litigation",
+        "shareholder dispute",
+        "breach of contract Australia",
+        "Federal Court proceedings",
+        
+        # ADR
+        "arbitration Australia",
+        "mediation settlement",
+        "dispute resolution",
+        
+        # Construction & Security of Payment
+        "security of payment",
+        "construction dispute Australia",
+        "building industry payment",
+        
+        # Corporate & Governance
+        "director penalties",
+        "corporate governance breach",
+        "insolvent trading"
+    ]
+    
+    all_articles = []
+    
+    for i, topic in enumerate(topics):
+        print(f"    [{i+1}/{len(topics)}] Searching: {topic}")
+        
+        articles = fetch_google_news_by_topic(topic)
+        
+        if articles:
+            all_articles.extend(articles)
+            print(f"      ✓ Found {len(articles)} articles")
+        else:
+            print(f"      - No results")
+        
+        # Rate limiting - be respectful to Google
+        time.sleep(2)
+    
+    # Remove duplicates based on title
+    seen_titles = set()
+    unique_articles = []
+    
+    for article in all_articles:
+        title_key = article['title'][:100].lower()
+        if title_key not in seen_titles:
+            seen_titles.add(title_key)
+            unique_articles.append(article)
+    
+    print(f"\n  ✓ Total: {len(all_articles)} articles found, {len(unique_articles)} unique")
+    
+    return unique_articles
+
+def fetch_targeted_google_news():
+    """
+    Faster version with combined searches for key topics
+    """
+    print("  Fetching targeted Google News...")
+    
+    # Combined searches for efficiency
+    search_queries = [
+        "insolvency OR liquidation OR administration Australia",
+        "ASIC OR ACCC enforcement penalty Australia",
+        "AML CTF compliance Australia",
+        "workplace safety OR employment law Australia",
+        "class action OR litigation Australia",
+        "security of payment construction Australia",
+        "arbitration OR mediation dispute Australia"
+    ]
+    
+    all_articles = []
+    
+    for i, query in enumerate(search_queries):
+        print(f"    [{i+1}/{len(search_queries)}] {query[:50]}...")
+        
+        try:
+            encoded_query = quote_plus(query)
+            url = f"https://news.google.com/rss/search?q={encoded_query}&hl=en&gl=AU&ceid=AU:en"
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+            
+            response = requests.get(url, headers=headers, timeout=15)
+            
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.content, 'xml')
+                items = soup.find_all('item')[:15]  # More results for combined searches
+                
+                for item in items:
+                    title = item.find('title')
+                    link = item.find('link')
+                    pub_date = item.find('pubDate')
+                    source = item.find('source')
+                    
+                    if title:
+                        article = {
+                            'title': title.get_text(strip=True)[:300],
+                            'link': link.get_text(strip=True) if link else '',
+                            'date': pub_date.get_text(strip=True)[:50] if pub_date else '',
+                            'source': source.get_text(strip=True) if source else 'Unknown',
+                            'search_query': query[:50]
+                        }
+                        all_articles.append(article)
+                
+                print(f"      ✓ Found {len(items)} articles")
+            
+            time.sleep(2)  # Rate limiting
+            
+        except Exception as e:
+            print(f"      ✗ Error: {str(e)[:100]}")
+            continue
+    
+    # Remove duplicates
+    seen_titles = set()
+    unique_articles = []
+    
+    for article in all_articles:
+        title_key = article['title'][:100].lower()
+        if title_key not in seen_titles:
+            seen_titles.add(title_key)
+            unique_articles.append(article)
+    
+    print(f"  ✓ Total: {len(unique_articles)} unique articles\n")
+    
+    return unique_articles
 
 def fetch_asic_insolvency_notices():
     """
-    Fetch recent ASIC insolvency notices
+    ASIC insolvency notices
     """
     notices = []
+    
     try:
-        # Try the main search page
-        url = "https://insolvencynotices.asic.gov.au/browsesearch-notices/notice-search"
+        base_url = "https://insolvencynotices.asic.gov.au"
+        search_url = f"{base_url}/browsesearch-notices/notice-search"
         
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             'Accept-Language': 'en-AU,en;q=0.9',
+            'Referer': base_url
         }
         
-        # Try GET first, then POST if that fails
-        response = requests.get(url, headers=headers, timeout=15, allow_redirects=True)
+        session = requests.Session()
+        session.get(base_url, headers=headers, timeout=15)
+        time.sleep(1)
+        
+        response = session.get(search_url, headers=headers, timeout=15)
         
         print(f"  ASIC Insolvency Status: HTTP {response.status_code}")
         
         if response.status_code == 200:
             soup = BeautifulSoup(response.content, 'html.parser')
             
-            # Look for notice listings
-            notice_rows = soup.find_all(['tr', 'div'], class_=re.compile(r'notice|result|item'))
+            notice_rows = soup.find_all(['tr', 'div'], class_=re.compile(r'notice|result|row'), limit=20)
             
-            for row in notice_rows[:15]:
+            for row in notice_rows:
                 text = row.get_text(strip=True)
-                if len(text) > 30:
-                    notices.append({
-                        'text': text[:300],
-                        'source': 'ASIC Insolvency Notices'
-                    })
+                if len(text) > 40:
+                    if any(indicator in text for indicator in ['PTY', 'LTD', 'LIMITED', 'ACN', 'ABN']):
+                        notices.append({
+                            'text': text[:400],
+                            'source': 'ASIC Insolvency Notices'
+                        })
             
             if notices:
                 print(f"  ✓ Found {len(notices)} insolvency notices")
             else:
-                # Even if we can't parse notices, note the page is accessible
                 notices = [{
-                    'status': 'Page accessible - requires specific search parameters',
-                    'url': url,
-                    'note': 'Manual configuration needed for date range searches'
+                    'status': 'Page accessible - requires manual search',
+                    'url': search_url
                 }]
-                print(f"  ⚠ Page accessible but needs search configuration")
+                print(f"  ⚠ ASIC accessible but needs config")
         else:
-            notices = [{
-                'status': f'HTTP {response.status_code}',
-                'url': url,
-                'note': 'May require session cookies or CAPTCHA'
-            }]
-            
+            notices = [{'status': f'HTTP {response.status_code}'}]
+        
     except Exception as e:
-        print(f"  ✗ ASIC Insolvency error: {str(e)[:100]}")
-        notices = [{'error': str(e)[:200], 'source': 'ASIC Insolvency'}]
+        print(f"  ✗ ASIC error: {str(e)[:100]}")
+        notices = [{'error': str(e)[:200]}]
     
     return notices
 
 def fetch_asic_company_announcements():
     """
-    Fetch ASIC media releases with better parsing
+    ASIC media releases
     """
     announcements = []
     
     try:
-        url = "https://asic.gov.au/about-asic/news-centre/find-a-media-release/"
+        url = "https://asic.gov.au/about-asic/news-centre/find-a-media-release/find-a-media-release/"
         
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'en-AU,en;q=0.9',
         }
         
         response = requests.get(url, headers=headers, timeout=15, allow_redirects=True)
@@ -87,180 +295,89 @@ def fetch_asic_company_announcements():
         if response.status_code == 200:
             soup = BeautifulSoup(response.content, 'html.parser')
             
-            # Try multiple selectors
-            article_elements = (
-                soup.find_all('article') or 
-                soup.find_all('div', class_=re.compile(r'media|release|news|item')) or
-                soup.find_all('li', class_=re.compile(r'media|release|news'))
+            items = (
+                soup.find_all('article') or
+                soup.find_all('div', class_=re.compile(r'media|release|news')) or
+                soup.find_all('li', class_=re.compile(r'media|release'))
             )
             
-            for article in article_elements[:15]:
-                # Look for titles/headings
-                title_elem = (
-                    article.find('h2') or 
-                    article.find('h3') or 
-                    article.find('h4') or
-                    article.find('a', class_=re.compile(r'title|heading'))
-                )
-                
+            for item in items[:20]:
+                title_elem = item.find(['h2', 'h3', 'h4', 'a'])
                 if title_elem:
                     title = title_elem.get_text(strip=True)
-                    if len(title) > 20:
-                        # Try to find date
-                        date_elem = article.find('time') or article.find(class_=re.compile(r'date|time'))
-                        date_str = date_elem.get_text(strip=True) if date_elem else 'Date unknown'
+                    if len(title) > 25:
+                        date_elem = item.find(['time', 'span'], class_=re.compile(r'date|time'))
+                        date_text = date_elem.get_text(strip=True) if date_elem else ''
                         
                         announcements.append({
-                            'title': title[:250],
-                            'date': date_str[:50],
-                            'source': 'ASIC Media Release'
+                            'title': title[:300],
+                            'date': date_text[:50],
+                            'source': 'ASIC'
                         })
             
             if announcements:
-                print(f"  ✓ Found {len(announcements)} ASIC media releases")
+                print(f"  ✓ Found {len(announcements)} ASIC releases")
             else:
-                # Try to get any links
-                all_links = soup.find_all('a', href=re.compile(r'media-release|news'))[:10]
-                for link in all_links:
-                    text = link.get_text(strip=True)
-                    if len(text) > 20:
-                        announcements.append({
-                            'title': text[:250],
-                            'source': 'ASIC'
-                        })
-                
-                if announcements:
-                    print(f"  ✓ Found {len(announcements)} ASIC items via links")
-                else:
-                    announcements = [{'status': 'Page accessible', 'url': url, 'note': 'HTML structure may have changed'}]
-                    print(f"  ⚠ Page accessible but content structure changed")
-        else:
-            announcements = [{'status': f'HTTP {response.status_code}', 'url': url}]
+                announcements = [{'status': 'Page accessible but structure changed'}]
+                print(f"  ⚠ ASIC needs parser update")
         
     except Exception as e:
-        print(f"  ✗ ASIC announcements error: {str(e)[:100]}")
+        print(f"  ✗ ASIC error: {str(e)[:100]}")
         announcements = [{'error': str(e)[:200]}]
     
     return announcements
 
-def fetch_federal_court_notices():
-    """
-    Fetch Federal Court recent judgments
-    """
-    filings = []
-    
-    try:
-        # Try the judgments search page
-        url = "https://www.fedcourt.gov.au/digital-law-library/judgments/search"
-        
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        }
-        
-        response = requests.get(url, headers=headers, timeout=15, allow_redirects=True)
-        
-        print(f"  Federal Court Status: HTTP {response.status_code}")
-        
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.content, 'html.parser')
-            
-            # Look for case listings
-            case_links = soup.find_all('a', href=re.compile(r'/judgment/|/case/'))[:15]
-            
-            for link in case_links:
-                text = link.get_text(strip=True)
-                if len(text) > 15:
-                    filings.append({
-                        'case': text[:300],
-                        'url': link.get('href', '')[:200],
-                        'source': 'Federal Court'
-                    })
-            
-            if filings:
-                print(f"  ✓ Found {len(filings)} Federal Court cases")
-            else:
-                filings = [{
-                    'status': 'Page accessible',
-                    'url': url,
-                    'note': 'Configure search parameters for specific practice areas'
-                }]
-                print(f"  ⚠ Page accessible but needs search config")
-        elif response.status_code == 403:
-            filings = [{
-                'status': 'HTTP 403 - Access Forbidden',
-                'note': 'May require IP whitelisting or different access method',
-                'alternative': 'Try AustLII for Federal Court cases'
-            }]
-            print(f"  ✗ Federal Court blocked (403)")
-        else:
-            filings = [{'status': f'HTTP {response.status_code}', 'url': url}]
-        
-    except Exception as e:
-        print(f"  ✗ Federal Court error: {str(e)[:100]}")
-        filings = [{'error': str(e)[:200]}]
-    
-    return filings
-
 def fetch_accc_enforcement():
     """
-    Fetch ACCC media releases with better error handling
+    ACCC enforcement actions
     """
     enforcement = []
     
     try:
-        url = "https://www.accc.gov.au/media-releases"
+        urls = [
+            "https://www.accc.gov.au/about-us/media/media-releases",
+            "https://www.accc.gov.au/media-releases"
+        ]
         
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         }
         
-        response = requests.get(url, headers=headers, timeout=15, allow_redirects=True)
+        for url in urls:
+            try:
+                response = requests.get(url, headers=headers, timeout=15, allow_redirects=True)
+                
+                print(f"  ACCC trying {url.split('/')[-1]}: HTTP {response.status_code}")
+                
+                if response.status_code == 200:
+                    soup = BeautifulSoup(response.content, 'html.parser')
+                    
+                    items = soup.find_all(['article', 'div', 'li'], limit=40)
+                    
+                    for item in items:
+                        title_elem = item.find(['h2', 'h3', 'h4', 'a'])
+                        if title_elem:
+                            text = title_elem.get_text(strip=True)
+                            if len(text) > 25:
+                                if any(keyword in text.lower() for keyword in 
+                                    ['court', 'penalty', 'fine', 'action', 'proceeding',
+                                     'breach', 'investigation', 'enforcement', 'undertaking']):
+                                    enforcement.append({
+                                        'title': text[:300],
+                                        'source': 'ACCC Enforcement'
+                                    })
+                    
+                    if enforcement:
+                        print(f"  ✓ Found {len(enforcement)} ACCC items")
+                        break
+                    
+            except Exception:
+                continue
         
-        print(f"  ACCC Status: HTTP {response.status_code}")
-        
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.content, 'html.parser')
-            
-            # Try multiple selectors for media releases
-            items = (
-                soup.find_all('article') or
-                soup.find_all('div', class_=re.compile(r'media|release|news')) or
-                soup.find_all('li')
-            )
-            
-            for item in items[:30]:
-                title_elem = item.find(['h2', 'h3', 'h4', 'a'])
-                if title_elem:
-                    text = title_elem.get_text(strip=True)
-                    if len(text) > 20:
-                        # Filter for enforcement content
-                        if any(keyword in text.lower() for keyword in 
-                            ['court', 'penalty', 'action', 'proceeding', 'fine', 'breach', 'investigation', 'enforcement']):
-                            enforcement.append({
-                                'title': text[:250],
-                                'source': 'ACCC Enforcement'
-                            })
-                        elif len(enforcement) < 5:  # Include some general releases too
-                            enforcement.append({
-                                'title': text[:250],
-                                'source': 'ACCC'
-                            })
-            
-            if enforcement:
-                print(f"  ✓ Found {len(enforcement)} ACCC items")
-            else:
-                enforcement = [{'status': 'Page accessible', 'url': url, 'note': 'Content structure changed'}]
-                print(f"  ⚠ ACCC page accessible but content not parsed")
-        elif response.status_code == 404:
-            enforcement = [{
-                'status': 'HTTP 404 - URL may have changed',
-                'try_instead': 'https://www.accc.gov.au/about-us/media'
-            }]
-            print(f"  ✗ ACCC 404 - URL changed")
-        else:
-            enforcement = [{'status': f'HTTP {response.status_code}', 'url': url}]
+        if not enforcement:
+            enforcement = [{'status': 'No content found'}]
+            print(f"  ⚠ ACCC - no content")
         
     except Exception as e:
         print(f"  ✗ ACCC error: {str(e)[:100]}")
@@ -270,80 +387,76 @@ def fetch_accc_enforcement():
 
 def fetch_austlii_federal_court():
     """
-    Fetch recent Federal Court cases from AustLII (free alternative)
+    Federal Court cases via AustLII
     """
     cases = []
     
     try:
-        # Recent FCA cases
-        url = "http://www8.austlii.edu.au/cgi-bin/viewdb/au/cases/cth/FCA/2025/"
+        current_year = datetime.now().year
+        urls = [
+            f"http://www8.austlii.edu.au/cgi-bin/viewdb/au/cases/cth/FCA/{current_year}/",
+            f"http://www8.austlii.edu.au/cgi-bin/viewdb/au/cases/cth/FCA/{current_year-1}/"
+        ]
         
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
         
-        response = requests.get(url, headers=headers, timeout=15)
-        
-        print(f"  AustLII FCA Status: HTTP {response.status_code}")
-        
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.content, 'html.parser')
-            
-            # Find case links
-            case_links = soup.find_all('a', href=re.compile(r'\d+\.html'))[:20]
-            
-            for link in case_links:
-                case_name = link.get_text(strip=True)
-                if len(case_name) > 10:
-                    cases.append({
-                        'case': case_name[:300],
-                        'court': 'Federal Court of Australia',
-                        'source': 'AustLII',
-                        'year': '2025'
-                    })
-            
-            if cases:
-                print(f"  ✓ Found {len(cases)} recent FCA cases on AustLII")
-            else:
-                # Try 2024 cases
-                url_2024 = "http://www8.austlii.edu.au/cgi-bin/viewdb/au/cases/cth/FCA/2024/"
-                response_2024 = requests.get(url_2024, headers=headers, timeout=15)
+        for url in urls:
+            try:
+                response = requests.get(url, headers=headers, timeout=15)
+                year = url.split('/')[-2]
                 
-                if response_2024.status_code == 200:
-                    soup_2024 = BeautifulSoup(response_2024.content, 'html.parser')
-                    case_links_2024 = soup_2024.find_all('a', href=re.compile(r'\d+\.html'))[-15:]  # Last 15 from 2024
+                print(f"  AustLII FCA {year} Status: HTTP {response.status_code}")
+                
+                if response.status_code == 200:
+                    soup = BeautifulSoup(response.content, 'html.parser')
+                    case_links = soup.find_all('a', href=re.compile(r'\d+\.html'))
                     
-                    for link in case_links_2024:
+                    limit = 20 if year == str(current_year) else 10
+                    recent_cases = case_links[-limit:] if year == str(current_year - 1) else case_links[:limit]
+                    
+                    for link in recent_cases:
                         case_name = link.get_text(strip=True)
-                        if len(case_name) > 10:
-                            cases.append({
-                                'case': case_name[:300],
-                                'court': 'Federal Court of Australia',
-                                'source': 'AustLII',
-                                'year': '2024 (recent)'
-                            })
+                        if len(case_name) > 15:
+                            text_lower = case_name.lower()
+                            if any(keyword in text_lower for keyword in 
+                                ['corporation', 'insolvency', 'asic', 'accc', 'liquidat',
+                                 'administration', 'bankruptcy', 'employment', 'workplace']):
+                                cases.append({
+                                    'case': case_name[:400],
+                                    'court': 'Federal Court of Australia',
+                                    'source': 'AustLII',
+                                    'year': year,
+                                    'relevance': 'High'
+                                })
+                            elif len(cases) < 15:
+                                cases.append({
+                                    'case': case_name[:400],
+                                    'court': 'Federal Court',
+                                    'source': 'AustLII',
+                                    'year': year
+                                })
                     
                     if cases:
-                        print(f"  ✓ Found {len(cases)} late 2024 FCA cases on AustLII")
+                        print(f"  ✓ Found {len([c for c in cases if c['year']==year])} FCA {year} cases")
+                
+            except Exception as e:
+                print(f"  ⚠ AustLII FCA {year} error: {str(e)[:100]}")
+                continue
         
         if not cases:
-            cases = [{
-                'status': 'AustLII accessible',
-                'note': 'Free legal database - configure for specific searches',
-                'databases': ['FCA 2025', 'FCA 2024', 'NSWSC', 'VSC', 'QSC'],
-                'url': 'http://www.austlii.edu.au'
-            }]
-            print(f"  ⚠ AustLII accessible but needs configuration")
+            cases = [{'status': 'AustLII accessible', 'instruction': 'Configure searches'}]
         
     except Exception as e:
         print(f"  ✗ AustLII error: {str(e)[:100]}")
-        cases = [{'error': str(e)[:200], 'source': 'AustLII'}]
+        cases = [{'error': str(e)[:200]}]
     
     return cases
 
 def fetch_abc_news_business():
     """
-    Fetch ABC News Business with better parsing
+    ABC News Business
     """
     news = []
     
@@ -361,39 +474,24 @@ def fetch_abc_news_business():
         if response.status_code == 200:
             soup = BeautifulSoup(response.content, 'html.parser')
             
-            # Try various selectors
-            articles = (
-                soup.find_all('article') or
-                soup.find_all('div', class_=re.compile(r'article|story|item')) or
-                soup.find_all('a', class_=re.compile(r'article|story'))
-            )
+            articles = soup.find_all(['article', 'div', 'a'], limit=50)
             
-            for article in articles[:40]:
-                # Find headline
-                headline_elem = (
-                    article.find('h3') or 
-                    article.find('h2') or 
-                    article.find('h4') or
-                    article
-                )
-                
+            for article in articles:
+                headline_elem = article.find(['h1', 'h2', 'h3', 'h4']) or article
                 text = headline_elem.get_text(strip=True)
                 
-                # Filter for business/legal keywords
                 if len(text) > 25:
                     if any(keyword in text.lower() for keyword in 
-                        ['company', 'companies', 'court', 'asic', 'accc', 'administration', 
-                         'liquidat', 'bankrupt', 'lawsuit', 'regulator', 'fine', 'investigation',
-                         'corporate', 'business', 'asx', 'shares', 'market']):
+                        ['company', 'court', 'asic', 'accc', 'administration',
+                         'liquidat', 'bankrupt', 'lawsuit', 'regulator',
+                         'investigation', 'collapse', 'insolvency']):
                         news.append({
                             'headline': text[:300],
                             'source': 'ABC News Business'
                         })
             
             if news:
-                print(f"  ✓ Found {len(news)} ABC business news items")
-            else:
-                print(f"  ⚠ ABC News page accessible but no matching items")
+                print(f"  ✓ Found {len(news)} ABC news items")
         
     except Exception as e:
         print(f"  ⚠ ABC News error: {str(e)[:100]}")
@@ -402,31 +500,33 @@ def fetch_abc_news_business():
 
 def generate_briefing():
     """
-    Collect all data and generate briefing
+    Generate comprehensive briefing with Google News
     """
     print("\n" + "="*70)
     print("COLLECTING AUSTRALIAN LEGAL INTELLIGENCE DATA")
+    print("Google News + Public Sources")
     print("="*70 + "\n")
     
     # Collect data from all sources
+    print("Fetching Google News (all practice areas)...")
+    google_news = fetch_targeted_google_news()  # Use targeted for speed
+    # Alternative: google_news = fetch_comprehensive_google_news()  # More thorough but slower
+    time.sleep(1)
+    
     print("Fetching ASIC insolvency notices...")
     asic_insolvency = fetch_asic_insolvency_notices()
     time.sleep(1)
     
-    print("Fetching ASIC announcements...")
+    print("Fetching ASIC media releases...")
     asic_announcements = fetch_asic_company_announcements()
-    time.sleep(1)
-    
-    print("Fetching Federal Court notices...")
-    federal_court = fetch_federal_court_notices()
     time.sleep(1)
     
     print("Fetching ACCC enforcement actions...")
     accc_enforcement = fetch_accc_enforcement()
     time.sleep(1)
     
-    print("Fetching AustLII Federal Court cases...")
-    austlii_cases = fetch_austlii_federal_court()
+    print("Fetching Federal Court cases (AustLII)...")
+    federal_court = fetch_austlii_federal_court()
     time.sleep(1)
     
     print("Fetching ABC News business...")
@@ -436,35 +536,74 @@ def generate_briefing():
     print("DATA COLLECTION COMPLETE")
     print("="*70 + "\n")
     
-    # ASX note
-    asx_note = [{
-        'note': 'ASX price-sensitive announcements require subscription',
-        'options': 'IRESS, Morningstar, Bloomberg, or ASX direct feed',
-        'free_alternative': 'Google Finance alerts for specific ASX codes'
-    }]
+    # Organize Google News by practice area for better analysis
+    practice_areas = {
+        'Insolvency & Restructuring': [],
+        'Regulatory & Compliance': [],
+        'Workplace & Employment': [],
+        'Litigation & Disputes': [],
+        'ADR': [],
+        'Construction & Security of Payment': [],
+        'Corporate Governance': []
+    }
+    
+    for article in google_news:
+        title_lower = article['title'].lower()
+        
+        if any(kw in title_lower for kw in ['insolvency', 'liquidation', 'administration', 'receivership', 'restructuring', 'bankruptcy']):
+            practice_areas['Insolvency & Restructuring'].append(article)
+        elif any(kw in title_lower for kw in ['asic', 'accc', 'aml', 'ctf', 'compliance', 'regulation']):
+            practice_areas['Regulatory & Compliance'].append(article)
+        elif any(kw in title_lower for kw in ['workplace', 'employment', 'unfair dismissal', 'redundanc', 'fair work']):
+            practice_areas['Workplace & Employment'].append(article)
+        elif any(kw in title_lower for kw in ['class action', 'litigation', 'lawsuit', 'proceeding']):
+            practice_areas['Litigation & Disputes'].append(article)
+        elif any(kw in title_lower for kw in ['arbitration', 'mediation', 'dispute resolution']):
+            practice_areas['ADR'].append(article)
+        elif any(kw in title_lower for kw in ['security of payment', 'construction dispute', 'building']):
+            practice_areas['Construction & Security of Payment'].append(article)
+        elif any(kw in title_lower for kw in ['director', 'governance', 'insolvent trading']):
+            practice_areas['Corporate Governance'].append(article)
     
     # Format data for Claude
     data_summary = f"""
+=== GOOGLE NEWS BY PRACTICE AREA ===
+
+INSOLVENCY & RESTRUCTURING ({len(practice_areas['Insolvency & Restructuring'])} articles):
+{json.dumps(practice_areas['Insolvency & Restructuring'], indent=2)}
+
+REGULATORY & COMPLIANCE ({len(practice_areas['Regulatory & Compliance'])} articles):
+{json.dumps(practice_areas['Regulatory & Compliance'], indent=2)}
+
+WORKPLACE & EMPLOYMENT ({len(practice_areas['Workplace & Employment'])} articles):
+{json.dumps(practice_areas['Workplace & Employment'], indent=2)}
+
+LITIGATION & DISPUTES ({len(practice_areas['Litigation & Disputes'])} articles):
+{json.dumps(practice_areas['Litigation & Disputes'], indent=2)}
+
+ADR (ARBITRATION/MEDIATION) ({len(practice_areas['ADR'])} articles):
+{json.dumps(practice_areas['ADR'], indent=2)}
+
+CONSTRUCTION & SECURITY OF PAYMENT ({len(practice_areas['Construction & Security of Payment'])} articles):
+{json.dumps(practice_areas['Construction & Security of Payment'], indent=2)}
+
+CORPORATE GOVERNANCE ({len(practice_areas['Corporate Governance'])} articles):
+{json.dumps(practice_areas['Corporate Governance'], indent=2)}
+
 === ASIC INSOLVENCY NOTICES ===
 {json.dumps(asic_insolvency, indent=2)}
 
-=== ASIC ANNOUNCEMENTS & MEDIA RELEASES ===
+=== ASIC MEDIA RELEASES ===
 {json.dumps(asic_announcements, indent=2)}
-
-=== FEDERAL COURT FILINGS & JUDGMENTS ===
-{json.dumps(federal_court, indent=2)}
 
 === ACCC ENFORCEMENT ACTIONS ===
 {json.dumps(accc_enforcement, indent=2)}
 
-=== AUSTLII FEDERAL COURT CASES ===
-{json.dumps(austlii_cases, indent=2)}
+=== FEDERAL COURT CASES (AustLII) ===
+{json.dumps(federal_court, indent=2)}
 
-=== ABC NEWS BUSINESS (Context) ===
+=== ABC NEWS BUSINESS ===
 {json.dumps(abc_news, indent=2)}
-
-=== ASX ANNOUNCEMENTS ===
-{json.dumps(asx_note, indent=2)}
 """
     
     print("Generating briefing with Claude...")
@@ -476,7 +615,7 @@ def generate_briefing():
         return "ERROR: ANTHROPIC_API_KEY not found"
     
     if not api_key.startswith('sk-ant-'):
-        return f"ERROR: Invalid API key format"
+        return "ERROR: Invalid API key format"
     
     # Call Claude
     try:
@@ -484,47 +623,88 @@ def generate_briefing():
         
         message = client.messages.create(
             model="claude-sonnet-4-20250514",
-            max_tokens=4000,
+            max_tokens=6000,
             messages=[{
                 "role": "user",
-                "content": f"""You are a senior legal intelligence analyst for a top-tier Australian commercial law firm specializing in disputes, insolvency, and regulatory matters.
+                "content": f"""You are a senior legal intelligence analyst for a top-tier Australian commercial law firm with practice areas in: Insolvency & Restructuring, Regulatory Compliance, Workplace Law, Litigation, ADR, Construction, and Corporate Governance.
 
-Analyze this data collected from Australian sources on {datetime.now().strftime('%A, %d %B %Y')}:
+Analyze this comprehensive data collected from Google News and Australian public sources on {datetime.now().strftime('%A, %d %B %Y')}:
 
 {data_summary}
 
-Provide a comprehensive morning briefing with:
+Provide a detailed morning briefing with:
 
 ## EXECUTIVE SUMMARY
-Brief overview highlighting the most significant opportunities and trends identified.
+3-4 sentences highlighting the most significant revenue opportunities across all practice areas.
 
-## HIGH-PRIORITY OPPORTUNITIES
-List specific matters worth pursuing based on the data available. Include:
-- Company names (if mentioned)
-- Matter types
-- Why each is relevant for business development
-- Estimated value indicators (if available)
+## HIGH-PRIORITY OPPORTUNITIES BY PRACTICE AREA
+
+### INSOLVENCY & RESTRUCTURING
+- Specific companies entering administration/liquidation
+- Estimated creditor exposure or matter value
+- Source and immediate actions
+
+### REGULATORY & COMPLIANCE
+- ASIC/ACCC enforcement actions with class action potential
+- AML/CTF breaches or investigations
+- Companies facing regulatory scrutiny
+
+### WORKPLACE & EMPLOYMENT LAW
+- Major unfair dismissal cases
+- Mass redundancies
+- Workplace safety prosecutions
+- Fair Work Commission matters
+
+### LITIGATION & DISPUTES
+- Class actions (actual or potential)
+- Significant commercial disputes
+- Federal Court proceedings
+
+### CONSTRUCTION & SECURITY OF PAYMENT
+- Payment disputes
+- Construction company collapses
+- Security of payment claims
+
+### ADR
+- Notable arbitration or mediation matters
+- Dispute resolution opportunities
+
+### CORPORATE GOVERNANCE
+- Director penalty matters
+- Insolvent trading allegations
+- Governance breaches
 
 ## MARKET INTELLIGENCE
-- Industries showing activity or stress
-- Regulatory enforcement trends from ACCC/ASIC
-- Notable case developments from Federal Court/AustLII
-- Business news context from ABC
+- Industries under stress by practice area
+- Regulatory enforcement trends
+- Emerging legal risks
 
-## EMERGING TRENDS
-Patterns across industries, enforcement areas, or case types.
+## MEDIA ANALYSIS
+Key themes from Google News coverage with business development implications.
 
 ## RECOMMENDED ACTIONS
-Prioritized list of immediate actions:
-1. Specific companies/matters to investigate
-2. Conflicts checks needed
-3. Data source improvements needed
-4. Follow-up research required
+### Immediate (Today)
+1. Companies to contact (by practice area)
+2. Urgent conflicts checks
+3. Client alerts to prepare
+
+### This Week
+1. Follow-up investigations
+2. Business development opportunities
+3. Market monitoring
 
 ## DATA SOURCE PERFORMANCE
-Assess which sources provided actionable intelligence vs. which need improvement. Be specific about HTTP errors, access issues, or configuration needs.
+Rate each source (⭐⭐⭐⭐⭐ to ❌):
+- Google News (by practice area coverage)
+- ASIC Insolvency Notices
+- ASIC Media Releases
+- ACCC Enforcement
+- Federal Court (AustLII)
+- ABC News Business
 
-Focus on extracting maximum value from available data. If data is limited, provide strategic recommendations for improving collection."""
+Note which practice areas have strong vs. weak intelligence coverage.
+
+Be specific with company names, amounts, case names. Focus on actionable revenue opportunities across all practice areas."""
             }]
         )
         
@@ -540,21 +720,26 @@ def save_briefing(briefing):
     Save briefing to file
     """
     try:
-        filename = f"briefing_{datetime.now().strftime('%Y%m%d_%H%M')}.txt"
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M')
+        filename = f"briefing_{timestamp}.txt"
+        
+        header = f"""AUSTRALIAN LEGAL INTELLIGENCE BRIEFING
+Generated: {datetime.now().strftime('%A, %d %B %Y at %H:%M AEST')}
+Practice Areas: Insolvency, Regulatory, Workplace, Litigation, ADR, Construction, Governance
+Sources: Google News, ASIC, ACCC, Federal Court, ABC News
+{'='*70}
+
+"""
         
         with open(filename, 'w', encoding='utf-8') as f:
-            f.write(f"AUSTRALIAN LEGAL INTELLIGENCE BRIEFING\n")
-            f.write(f"Generated: {datetime.now().strftime('%A, %d %B %Y at %H:%M AEST')}\n")
-            f.write("="*70 + "\n\n")
+            f.write(header)
             f.write(briefing)
         
         with open('briefing.txt', 'w', encoding='utf-8') as f:
-            f.write(f"AUSTRALIAN LEGAL INTELLIGENCE BRIEFING\n")
-            f.write(f"Generated: {datetime.now().strftime('%A, %d %B %Y at %H:%M AEST')}\n")
-            f.write("="*70 + "\n\n")
+            f.write(header)
             f.write(briefing)
         
-        print(f"✓ Briefing saved")
+        print(f"✓ Briefing saved to {filename}")
         return filename
         
     except Exception as e:
@@ -564,6 +749,7 @@ def save_briefing(briefing):
 if __name__ == "__main__":
     print("\n" + "="*70)
     print("AUSTRALIAN LEGAL INTELLIGENCE AGENT")
+    print("Multi-Practice Area Edition: Google News Integration")
     print("="*70)
     print(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("="*70 + "\n")

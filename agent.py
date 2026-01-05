@@ -10,6 +10,9 @@ import os
 import json
 from bs4 import BeautifulSoup
 import time
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 # Companies to monitor closely (watchlist)
 WATCHLIST_COMPANIES = [
@@ -508,21 +511,105 @@ def save_briefing(briefing_content):
     return filename
 
 
+def send_email(briefing_content, filename):
+    """Send briefing via email"""
+    try:
+        # Get email configuration from environment variables
+        email_to = os.environ.get('EMAIL_TO')
+        email_from = os.environ.get('EMAIL_FROM')
+        email_password = os.environ.get('EMAIL_PASSWORD')
+        smtp_server = os.environ.get('SMTP_SERVER')
+        smtp_port = int(os.environ.get('SMTP_PORT', '587'))
+
+        # Check if email is configured
+        if not all([email_to, email_from, email_password, smtp_server]):
+            print("Email not configured - skipping email send")
+            print(f"  EMAIL_TO: {'✓' if email_to else '✗'}")
+            print(f"  EMAIL_FROM: {'✓' if email_from else '✗'}")
+            print(f"  EMAIL_PASSWORD: {'✓' if email_password else '✗'}")
+            print(f"  SMTP_SERVER: {'✓' if smtp_server else '✗'}")
+            return False
+
+        # Create email message
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = f"Australian Legal Intelligence Briefing - {datetime.now().strftime('%B %d, %Y')}"
+        msg['From'] = email_from
+        msg['To'] = email_to
+
+        # Plain text version
+        text_content = briefing_content
+
+        # HTML version with better formatting
+        html_content = f"""
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                h1 {{ color: #1a1a1a; border-bottom: 2px solid #0066cc; padding-bottom: 10px; }}
+                h2 {{ color: #0066cc; margin-top: 20px; }}
+                ul {{ margin-left: 20px; }}
+                .highlight {{ background-color: #fff3cd; padding: 2px 5px; }}
+                .footer {{ margin-top: 30px; padding-top: 20px; border-top: 1px solid #ccc; font-size: 12px; color: #666; }}
+            </style>
+        </head>
+        <body>
+            <pre style="font-family: Arial, sans-serif; white-space: pre-wrap; word-wrap: break-word;">{briefing_content}</pre>
+            <div class="footer">
+                <p>Australian Legal Intelligence Briefing - Automated Daily Report</p>
+                <p>Generated: {datetime.now().strftime('%B %d, %Y at %H:%M AEST')}</p>
+            </div>
+        </body>
+        </html>
+        """
+
+        # Attach both versions
+        part1 = MIMEText(text_content, 'plain')
+        part2 = MIMEText(html_content, 'html')
+        msg.attach(part1)
+        msg.attach(part2)
+
+        # Send email
+        print(f"Sending email to {email_to}...")
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.starttls()
+            server.login(email_from, email_password)
+            server.send_message(msg)
+
+        print(f"✓ Email sent successfully to {email_to}")
+        return True
+
+    except Exception as e:
+        print(f"✗ Error sending email: {e}")
+        return False
+
+
 if __name__ == "__main__":
     print("Generating Australian Legal Intelligence Briefing...")
     print(f"Monitoring {len([c for c in WATCHLIST_COMPANIES if c.strip()])} companies")
     print(f"Focus industries: {', '.join(PRIORITY_INDUSTRIES[:3])}...")
 
     try:
+        # Generate briefing
         briefing = generate_briefing()
+
+        # Save to file
         filename = save_briefing(briefing)
 
+        # Send via email
+        email_sent = send_email(briefing, filename)
+
+        # Display preview
         print("\n" + "=" * 70)
         print("BRIEFING PREVIEW")
         print("=" * 70)
         print(briefing)
         print("=" * 70)
         print(f"\nBriefing generated successfully: {filename}")
+
+        if email_sent:
+            print("✓ Email delivered successfully")
+        else:
+            print("⚠ Email not sent (check configuration)")
 
     except Exception as e:
         print(f"Error generating briefing: {e}")

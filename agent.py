@@ -10,6 +10,7 @@ import os
 import json
 from bs4 import BeautifulSoup
 import time
+import feedparser
 
 # Companies to monitor closely (watchlist)
 WATCHLIST_COMPANIES = [
@@ -190,94 +191,110 @@ def fetch_austlii_recent_cases():
         return {"cases": [], "count": 0, "error": str(e)}
 
 
-def search_legal_news(query="australian legal news insolvency regulatory"):
-    """Search for Australian legal news using public search"""
+def fetch_google_news_rss(query, max_results=10):
+    """Fetch news from Google News RSS feed - reliable and no API key required"""
     try:
-        # Using DuckDuckGo HTML search (no API key required)
-        search_url = f"https://html.duckduckgo.com/html/?q={query.replace(' ', '+')}"
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
+        # Google News RSS URL with Australian localization
+        rss_url = f"https://news.google.com/rss/search?q={query.replace(' ', '+')}&hl=en-AU&gl=AU&ceid=AU:en"
 
-        response = requests.get(search_url, headers=headers, timeout=10)
-        response.raise_for_status()
+        feed = feedparser.parse(rss_url)
+        articles = []
 
-        soup = BeautifulSoup(response.content, 'html.parser')
-        results = []
+        for entry in feed.entries[:max_results]:
+            articles.append({
+                'title': entry.title,
+                'source': 'Google News',
+                'published': entry.get('published', 'Recent'),
+                'link': entry.get('link', '')
+            })
 
-        # Find search result links
-        result_links = soup.find_all('a', class_='result__a', limit=10)
-
-        for link in result_links[:10]:
-            title = link.get_text(strip=True)
-            if title and len(title) > 10:
-                results.append({
-                    'title': title,
-                    'source': 'Web Search'
-                })
-
-        return {"articles": results, "count": len(results)}
+        return {"articles": articles, "count": len(articles)}
 
     except Exception as e:
-        print(f"Error searching legal news: {e}")
+        print(f"Error fetching Google News for '{query}': {e}")
         return {"articles": [], "count": 0, "error": str(e)}
 
 
 def search_watchlist_companies():
-    """Search for news about specific watchlist companies"""
+    """Search for news about ALL watchlist companies using Google News RSS"""
     company_news = []
 
-    # Extract actual company names (remove comments)
-    active_companies = [c.strip().lstrip('#').strip() for c in WATCHLIST_COMPANIES if c.strip() and not c.strip().startswith('#')]
+    print(f"  Searching for all {len(WATCHLIST_COMPANIES)} watchlist companies...")
 
-    print(f"  Searching for {len(active_companies)} watchlist companies...")
-
-    for company in active_companies[:10]:  # Limit to first 10 to avoid rate limiting
+    for i, company in enumerate(WATCHLIST_COMPANIES, 1):
         if company:
             try:
-                results = search_legal_news(f"{company} australia legal news")
-                company_news.extend(results.get('articles', []))
-                time.sleep(0.5)  # Rate limiting
+                # Search for company news with Australian legal/business context
+                query = f'"{company}" australia (legal OR business OR court OR ASIC OR regulatory OR insolvency)'
+                results = fetch_google_news_rss(query, max_results=5)
+
+                if results.get('count', 0) > 0:
+                    print(f"    [{i}/{len(WATCHLIST_COMPANIES)}] {company}: {results.get('count', 0)} articles")
+                    company_news.extend(results.get('articles', []))
+                else:
+                    print(f"    [{i}/{len(WATCHLIST_COMPANIES)}] {company}: No news")
+
+                time.sleep(0.3)  # Rate limiting - be respectful
+
             except Exception as e:
-                print(f"  Error searching for {company}: {e}")
+                print(f"    Error searching for {company}: {e}")
                 continue
 
     return {"articles": company_news, "count": len(company_news)}
 
 
 def fetch_australian_legal_news():
-    """Aggregate Australian legal news from multiple sources"""
+    """Aggregate Australian legal news from multiple sources using Google News RSS"""
     all_news = []
 
-    # Search for general Australian legal news
-    print("  - General legal news...")
-    news_results = search_legal_news("australian legal news class action ASIC ACCC")
-    all_news.extend(news_results.get('articles', []))
+    # GENERAL MARKET THEMES (using Google News RSS)
 
-    time.sleep(1)  # Rate limiting
+    # 1. Class actions and litigation
+    print("  - Class actions & litigation...")
+    class_action_results = fetch_google_news_rss("australia class action litigation court", max_results=10)
+    all_news.extend(class_action_results.get('articles', []))
+    time.sleep(0.5)
 
-    # Search for insolvency news
-    print("  - Insolvency news...")
-    insolvency_results = search_legal_news("australian insolvency administration liquidation")
+    # 2. Insolvency and restructuring
+    print("  - Insolvency & restructuring...")
+    insolvency_results = fetch_google_news_rss("australia insolvency administration liquidation receivership", max_results=10)
     all_news.extend(insolvency_results.get('articles', []))
+    time.sleep(0.5)
 
-    time.sleep(1)  # Rate limiting
+    # 3. ASIC enforcement and regulatory
+    print("  - ASIC enforcement...")
+    asic_results = fetch_google_news_rss("australia ASIC enforcement investigation regulatory", max_results=10)
+    all_news.extend(asic_results.get('articles', []))
+    time.sleep(0.5)
 
-    # Search for regulatory enforcement
-    print("  - Regulatory enforcement...")
-    regulatory_results = search_legal_news("ASIC ACCC enforcement action australia")
-    all_news.extend(regulatory_results.get('articles', []))
+    # 4. ACCC and competition law
+    print("  - ACCC & competition...")
+    accc_results = fetch_google_news_rss("australia ACCC enforcement competition consumer", max_results=10)
+    all_news.extend(accc_results.get('articles', []))
+    time.sleep(0.5)
 
-    time.sleep(1)  # Rate limiting
+    # 5. Corporate disputes and M&A
+    print("  - Corporate disputes...")
+    corporate_results = fetch_google_news_rss("australia corporate dispute merger acquisition takeover", max_results=10)
+    all_news.extend(corporate_results.get('articles', []))
+    time.sleep(0.5)
 
-    # Search for watchlist companies
-    print("  - Watchlist company news...")
+    # 6. Director liability and governance
+    print("  - Director liability...")
+    director_results = fetch_google_news_rss("australia director liability governance breach duty", max_results=8)
+    all_news.extend(director_results.get('articles', []))
+    time.sleep(0.5)
+
+    # WATCHLIST COMPANIES (all 31 companies)
+    print("  - Watchlist company news (all 31 companies)...")
     watchlist_results = search_watchlist_companies()
     all_news.extend(watchlist_results.get('articles', []))
 
+    print(f"\n  Total articles collected: {len(all_news)}")
+
     return {
-        "articles": all_news[:30],  # Increased limit to 30 results
-        "count": len(all_news[:30])
+        "articles": all_news[:100],  # Increased limit to accommodate all sources
+        "count": len(all_news[:100])
     }
 
 
@@ -334,10 +351,10 @@ def generate_briefing():
         for c in austlii_data.get('cases', [])[:10]
     ]) or "No recent cases found"
 
-    # Format news articles
+    # Format news articles (showing top 50 out of up to 100 collected)
     news_articles_str = "\n".join([
         f"- {article.get('title', 'No title')}"
-        for article in news_data.get('articles', [])[:15]
+        for article in news_data.get('articles', [])[:50]
     ]) or "No recent legal news found"
 
     data_summary = f"""

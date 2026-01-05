@@ -270,34 +270,70 @@ def fetch_australian_legal_news():
     all_news.extend(class_action_results.get('articles', []))
     time.sleep(0.5)
 
-    # 2. Insolvency and restructuring
+    # 2. Insolvency and restructuring - EXPANDED
     print("  - Insolvency & restructuring...")
     insolvency_results = fetch_google_news_rss("australia insolvency administration liquidation receivership", max_results=10)
     all_news.extend(insolvency_results.get('articles', []))
     time.sleep(0.5)
 
-    # 3. ASIC enforcement and regulatory
+    # 2a. State-based insolvency appointments
+    print("  - State insolvency appointments...")
+    state_insolvency = fetch_google_news_rss("australia appointed administrator receiver liquidator", max_results=8)
+    all_news.extend(state_insolvency.get('articles', []))
+    time.sleep(0.5)
+
+    # 2b. Voluntary administration and DOCA
+    print("  - Voluntary administration...")
+    va_results = fetch_google_news_rss("australia voluntary administration DOCA deed company arrangement", max_results=8)
+    all_news.extend(va_results.get('articles', []))
+    time.sleep(0.5)
+
+    # 3. Supreme Court winding up applications
+    print("  - Supreme Court winding up...")
+    supreme_court_results = fetch_google_news_rss("australia supreme court winding up application", max_results=8)
+    all_news.extend(supreme_court_results.get('articles', []))
+    time.sleep(0.5)
+
+    # 4. ASIC enforcement and regulatory - EXPANDED
     print("  - ASIC enforcement...")
     asic_results = fetch_google_news_rss("australia ASIC enforcement investigation regulatory", max_results=10)
     all_news.extend(asic_results.get('articles', []))
     time.sleep(0.5)
 
-    # 4. ACCC and competition law
+    # 4a. ASIC banning orders and disqualifications
+    print("  - ASIC bans & disqualifications...")
+    asic_bans = fetch_google_news_rss("australia ASIC banned disqualified director", max_results=8)
+    all_news.extend(asic_bans.get('articles', []))
+    time.sleep(0.5)
+
+    # 5. ACCC and competition law
     print("  - ACCC & competition...")
     accc_results = fetch_google_news_rss("australia ACCC enforcement competition consumer", max_results=10)
     all_news.extend(accc_results.get('articles', []))
     time.sleep(0.5)
 
-    # 5. Corporate disputes and M&A
+    # 6. Corporate disputes and M&A
     print("  - Corporate disputes...")
     corporate_results = fetch_google_news_rss("australia corporate dispute merger acquisition takeover", max_results=10)
     all_news.extend(corporate_results.get('articles', []))
     time.sleep(0.5)
 
-    # 6. Director liability and governance
+    # 7. Director liability and governance - EXPANDED
     print("  - Director liability...")
     director_results = fetch_google_news_rss("australia director liability governance breach duty", max_results=8)
     all_news.extend(director_results.get('articles', []))
+    time.sleep(0.5)
+
+    # 7a. Director resignations
+    print("  - Director resignations...")
+    director_resign = fetch_google_news_rss("australia director resigned stepping down departure", max_results=8)
+    all_news.extend(director_resign.get('articles', []))
+    time.sleep(0.5)
+
+    # 8. Trading while insolvent and phoenix activity
+    print("  - Insolvent trading...")
+    insolvent_trading = fetch_google_news_rss("australia insolvent trading phoenix activity director penalty", max_results=8)
+    all_news.extend(insolvent_trading.get('articles', []))
     time.sleep(0.5)
 
     # WATCHLIST COMPANIES (all 31 companies)
@@ -308,8 +344,8 @@ def fetch_australian_legal_news():
     print(f"\n  Total articles collected: {len(all_news)}")
 
     return {
-        "articles": all_news[:100],  # Increased limit to accommodate all sources
-        "count": len(all_news[:100])
+        "articles": all_news[:120],  # Increased limit to accommodate expanded sources
+        "count": len(all_news[:120])
     }
 
 
@@ -366,10 +402,10 @@ def generate_briefing():
         for c in austlii_data.get('cases', [])[:10]
     ]) or "No recent cases found"
 
-    # Format news articles (showing top 50 out of up to 100 collected)
+    # Format news articles (showing top 60 out of up to 120 collected)
     news_articles_str = "\n".join([
         f"- {article.get('title', 'No title')}"
-        for article in news_data.get('articles', [])[:50]
+        for article in news_data.get('articles', [])[:60]
     ]) or "No recent legal news found"
 
     data_summary = f"""

@@ -10,7 +10,6 @@ import os
 import json
 from bs4 import BeautifulSoup
 import time
-import feedparser
 
 # Companies to monitor closely (watchlist)
 WATCHLIST_COMPANIES = [
@@ -192,21 +191,37 @@ def fetch_austlii_recent_cases():
 
 
 def fetch_google_news_rss(query, max_results=10):
-    """Fetch news from Google News RSS feed - reliable and no API key required"""
+    """Fetch news from Google News RSS feed using direct XML parsing"""
     try:
         # Google News RSS URL with Australian localization
         rss_url = f"https://news.google.com/rss/search?q={query.replace(' ', '+')}&hl=en-AU&gl=AU&ceid=AU:en"
 
-        feed = feedparser.parse(rss_url)
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+
+        response = requests.get(rss_url, headers=headers, timeout=15)
+        response.raise_for_status()
+
+        # Parse XML RSS feed
+        soup = BeautifulSoup(response.content, 'xml')
         articles = []
 
-        for entry in feed.entries[:max_results]:
-            articles.append({
-                'title': entry.title,
-                'source': 'Google News',
-                'published': entry.get('published', 'Recent'),
-                'link': entry.get('link', '')
-            })
+        # Find all item elements in the RSS feed
+        items = soup.find_all('item', limit=max_results)
+
+        for item in items:
+            title_elem = item.find('title')
+            pubdate_elem = item.find('pubDate')
+            link_elem = item.find('link')
+
+            if title_elem:
+                articles.append({
+                    'title': title_elem.get_text(strip=True),
+                    'source': 'Google News',
+                    'published': pubdate_elem.get_text(strip=True) if pubdate_elem else 'Recent',
+                    'link': link_elem.get_text(strip=True) if link_elem else ''
+                })
 
         return {"articles": articles, "count": len(articles)}
 

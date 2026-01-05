@@ -13,37 +13,37 @@ import time
 
 # Companies to monitor closely (watchlist)
 WATCHLIST_COMPANIES = [
-    # Aussie Broadband
-    # British Solar Renewables
-    # Macquarie Bank
-    # Next DC
-    # Prospa
-    # Wingate
-    # La Salle
-    # Brookfield
-    # Egis
-    # Waveconn
-    # Scentia
-    # Abergeldie Comlex Infrastructure
-    # CPB Contractors
-    # Jacaranda
-    # Team Global Exrpress
-    # St Vincents Health Australia
-    # Northern Star Resoources
-    # Blackstone
-    # KKR
-    # Firefly Metals
-    # Cygnus Metals
-    # Greencross
-    # Bondi Brands
-    # Aula Energy
-    # ContiTech
-    # UGL
-    # David Jones
-    # Independent Reserve
-    # CoinSpot
-    # Asahi
-    # Downer EDI
+    'Aussie Broadband',
+    'British Solar Renewables',
+    'Macquarie Bank',
+    'Next DC',
+    'Prospa',
+    'Wingate',
+    'La Salle',
+    'Brookfield',
+    'Egis',
+    'Waveconn',
+    'Scentia',
+    'Abergeldie Complex Infrastructure',
+    'CPB Contractors',
+    'Jacaranda',
+    'Team Global Express',
+    'St Vincents Health Australia',
+    'Northern Star Resources',
+    'Blackstone',
+    'KKR',
+    'Firefly Metals',
+    'Cygnus Metals',
+    'Greencross',
+    'Bondi Brands',
+    'Aula Energy',
+    'ContiTech',
+    'UGL',
+    'David Jones',
+    'Independent Reserve',
+    'CoinSpot',
+    'Asahi',
+    'Downer EDI'
 ]
 
 # Industries to monitor closely
@@ -223,29 +223,61 @@ def search_legal_news(query="australian legal news insolvency regulatory"):
         return {"articles": [], "count": 0, "error": str(e)}
 
 
+def search_watchlist_companies():
+    """Search for news about specific watchlist companies"""
+    company_news = []
+
+    # Extract actual company names (remove comments)
+    active_companies = [c.strip().lstrip('#').strip() for c in WATCHLIST_COMPANIES if c.strip() and not c.strip().startswith('#')]
+
+    print(f"  Searching for {len(active_companies)} watchlist companies...")
+
+    for company in active_companies[:10]:  # Limit to first 10 to avoid rate limiting
+        if company:
+            try:
+                results = search_legal_news(f"{company} australia legal news")
+                company_news.extend(results.get('articles', []))
+                time.sleep(0.5)  # Rate limiting
+            except Exception as e:
+                print(f"  Error searching for {company}: {e}")
+                continue
+
+    return {"articles": company_news, "count": len(company_news)}
+
+
 def fetch_australian_legal_news():
     """Aggregate Australian legal news from multiple sources"""
     all_news = []
 
     # Search for general Australian legal news
+    print("  - General legal news...")
     news_results = search_legal_news("australian legal news class action ASIC ACCC")
     all_news.extend(news_results.get('articles', []))
 
     time.sleep(1)  # Rate limiting
 
     # Search for insolvency news
+    print("  - Insolvency news...")
     insolvency_results = search_legal_news("australian insolvency administration liquidation")
     all_news.extend(insolvency_results.get('articles', []))
 
     time.sleep(1)  # Rate limiting
 
     # Search for regulatory enforcement
+    print("  - Regulatory enforcement...")
     regulatory_results = search_legal_news("ASIC ACCC enforcement action australia")
     all_news.extend(regulatory_results.get('articles', []))
 
+    time.sleep(1)  # Rate limiting
+
+    # Search for watchlist companies
+    print("  - Watchlist company news...")
+    watchlist_results = search_watchlist_companies()
+    all_news.extend(watchlist_results.get('articles', []))
+
     return {
-        "articles": all_news[:20],  # Limit to top 20 results
-        "count": len(all_news[:20])
+        "articles": all_news[:30],  # Increased limit to 30 results
+        "count": len(all_news[:30])
     }
 
 
@@ -272,9 +304,17 @@ def generate_briefing():
     news_data = fetch_australian_legal_news()
 
     # Prepare data summary for Claude
-    watchlist_str = "\n".join([f"- {company}" for company in WATCHLIST_COMPANIES if company.strip()])
+    watchlist_str = "\n".join([f"- {company}" for company in WATCHLIST_COMPANIES if company])
     industries_str = ", ".join(PRIORITY_INDUSTRIES)
     keywords_str = ", ".join(HIGH_VALUE_KEYWORDS)
+
+    # Debug: Print data collection results
+    print(f"\nData Collection Summary:")
+    print(f"  ASIC releases: {asic_data.get('count', 0)}")
+    print(f"  ACCC releases: {accc_data.get('count', 0)}")
+    print(f"  AustLII cases: {austlii_data.get('count', 0)}")
+    print(f"  News articles: {news_data.get('count', 0)}")
+    print(f"  Total data points: {asic_data.get('count', 0) + accc_data.get('count', 0) + austlii_data.get('count', 0) + news_data.get('count', 0)}\n")
 
     # Format ASIC releases
     asic_releases_str = "\n".join([
@@ -337,31 +377,49 @@ Analyze this data from {datetime.now().strftime('%B %d, %Y')} (Australian source
 
 {data_summary}
 
+IMPORTANT INSTRUCTIONS:
+- Pay special attention to ANY mentions of our watchlist companies
+- Even if data is limited, provide strategic insights based on what IS available
+- Cross-reference news items with our priority industries and keywords
+- Identify potential opportunities even in general legal news
+- If specific company data is scarce, note this and suggest proactive monitoring approaches
+
 Generate a concise morning briefing with:
 
 ## Executive Summary
-[2-3 sentences on most significant Australian legal developments]
+Provide 2-3 sentences highlighting the most significant developments. If limited data, summarize what WAS found and note key gaps requiring further monitoring.
 
 ## High-Priority Opportunities
-[Ranked list of matters worth pursuing - focus on:
- - Class actions
+List specific matters worth pursuing from the data above:
+ - Class actions (existing or potential)
  - ASIC/ACCC regulatory investigations
  - Insolvency and restructuring matters
  - Director liability issues
  - Major commercial disputes
-]
 
-## Watchlist Activity
-[Any mentions or developments related to our monitored companies and industries]
+If no specific opportunities found, suggest areas to monitor based on industry trends.
+
+## Watchlist Company Activity
+Specifically identify ANY mentions of our {len(WATCHLIST_COMPANIES)} watchlist companies.
+Note: Even tangential mentions (industry news affecting these companies) are valuable.
+If none found, state this clearly and suggest targeted monitoring.
+
+## Priority Industry Developments
+Analyze news related to our priority industries: {industries_str}
+Identify potential opportunities or risks in these sectors.
 
 ## Emerging Trends
-[Patterns across Australian industries, regulators (ASIC, ACCC, etc.), or claim types]
+Identify patterns across Australian industries, regulators (ASIC, ACCC, etc.), or claim types.
+Consider broader market conditions affecting our practice areas.
 
 ## Action Items
-[Specific next steps for business development and client engagement]
+Provide specific, actionable next steps:
+ - Companies to research further
+ - Potential clients to contact
+ - Regulatory developments to monitor
+ - Market intelligence to gather
 
-Be specific about company names, amounts, and Australian jurisdictions when available.
-Focus on matters likely to be valuable for a commercial disputes and insolvency practice."""
+Be direct and practical - this briefing drives business development decisions."""
         }]
     )
 

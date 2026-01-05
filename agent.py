@@ -35,6 +35,7 @@ WATCHLIST_COMPANIES = [
     # CoinSpot
     # Asahi
     # Downer EDI
+]
 
 # Industries to monitor closely
 PRIORITY_INDUSTRIES = [

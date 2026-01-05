@@ -13,6 +13,7 @@ import time
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.utils import parsedate_to_datetime
 
 # Companies to monitor closely (watchlist)
 WATCHLIST_COMPANIES = [
@@ -193,8 +194,8 @@ def fetch_austlii_recent_cases():
         return {"cases": [], "count": 0, "error": str(e)}
 
 
-def fetch_google_news_rss(query, max_results=10):
-    """Fetch news from Google News RSS feed using direct XML parsing"""
+def fetch_google_news_rss(query, max_results=10, max_age_days=30):
+    """Fetch news from Google News RSS feed with date filtering"""
     try:
         # Google News RSS URL with Australian localization
         rss_url = f"https://news.google.com/rss/search?q={query.replace(' ', '+')}&hl=en-AU&gl=AU&ceid=AU:en"
@@ -209,9 +210,10 @@ def fetch_google_news_rss(query, max_results=10):
         # Parse XML RSS feed
         soup = BeautifulSoup(response.content, 'xml')
         articles = []
+        now = datetime.now(datetime.now().astimezone().tzinfo)
 
-        # Find all item elements in the RSS feed
-        items = soup.find_all('item', limit=max_results)
+        # Find all item elements (fetch more to account for filtering)
+        items = soup.find_all('item', limit=max_results * 3)
 
         for item in items:
             title_elem = item.find('title')
@@ -219,12 +221,45 @@ def fetch_google_news_rss(query, max_results=10):
             link_elem = item.find('link')
 
             if title_elem:
+                # Parse publication date and calculate age
+                age_days = None
+                time_category = 'unknown'
+
+                if pubdate_elem:
+                    try:
+                        pub_datetime = parsedate_to_datetime(pubdate_elem.get_text(strip=True))
+                        age_days = (now - pub_datetime).days
+
+                        # Categorize by age
+                        if age_days <= 1:
+                            time_category = '24h'
+                        elif age_days <= 7:
+                            time_category = '7d'
+                        elif age_days <= 30:
+                            time_category = '30d'
+                        else:
+                            time_category = 'old'
+
+                        # Skip articles older than max_age_days
+                        if age_days > max_age_days:
+                            continue
+
+                    except Exception as e:
+                        # If date parsing fails, include the article but mark as unknown age
+                        pass
+
                 articles.append({
                     'title': title_elem.get_text(strip=True),
                     'source': 'Google News',
                     'published': pubdate_elem.get_text(strip=True) if pubdate_elem else 'Recent',
-                    'link': link_elem.get_text(strip=True) if link_elem else ''
+                    'link': link_elem.get_text(strip=True) if link_elem else '',
+                    'age_days': age_days,
+                    'time_category': time_category
                 })
+
+        # Sort by age (newest first) and limit to max_results
+        articles.sort(key=lambda x: x.get('age_days', 999))
+        articles = articles[:max_results]
 
         return {"articles": articles, "count": len(articles)}
 
@@ -242,17 +277,39 @@ def search_watchlist_companies():
     for i, company in enumerate(WATCHLIST_COMPANIES, 1):
         if company:
             try:
-                # Search for company news with Australian legal/business context
-                query = f'"{company}" australia (legal OR business OR court OR ASIC OR regulatory OR insolvency)'
-                results = fetch_google_news_rss(query, max_results=5)
+                # Try multiple search variations to maximize results
+                queries = [
+                    f'"{company}" australia',  # General Australia news
+                    f'"{company}"',  # Company mentions anywhere (filtered to AU by RSS settings)
+                ]
 
-                if results.get('count', 0) > 0:
-                    print(f"    [{i}/{len(WATCHLIST_COMPANIES)}] {company}: {results.get('count', 0)} articles")
-                    company_news.extend(results.get('articles', []))
+                company_articles = []
+                for query in queries:
+                    results = fetch_google_news_rss(query, max_results=3, max_age_days=30)
+                    company_articles.extend(results.get('articles', []))
+                    time.sleep(0.2)
+
+                # Deduplicate by title
+                seen_titles = set()
+                unique_articles = []
+                for article in company_articles:
+                    title = article.get('title', '')
+                    if title and title not in seen_titles:
+                        seen_titles.add(title)
+                        unique_articles.append(article)
+
+                if len(unique_articles) > 0:
+                    # Show age breakdown
+                    age_24h = sum(1 for a in unique_articles if a.get('time_category') == '24h')
+                    age_7d = sum(1 for a in unique_articles if a.get('time_category') == '7d')
+                    age_30d = sum(1 for a in unique_articles if a.get('time_category') == '30d')
+
+                    print(f"    [{i}/{len(WATCHLIST_COMPANIES)}] {company}: {len(unique_articles)} articles (24h:{age_24h} 7d:{age_7d} 30d:{age_30d})")
+                    company_news.extend(unique_articles[:5])  # Limit to top 5 per company
                 else:
-                    print(f"    [{i}/{len(WATCHLIST_COMPANIES)}] {company}: No news")
+                    print(f"    [{i}/{len(WATCHLIST_COMPANIES)}] {company}: No recent news")
 
-                time.sleep(0.3)  # Rate limiting - be respectful
+                time.sleep(0.3)  # Rate limiting
 
             except Exception as e:
                 print(f"    Error searching for {company}: {e}")
@@ -405,11 +462,19 @@ def generate_briefing():
         for c in austlii_data.get('cases', [])[:10]
     ]) or "No recent cases found"
 
-    # Format news articles (showing top 60 out of up to 120 collected)
-    news_articles_str = "\n".join([
-        f"- {article.get('title', 'No title')}"
-        for article in news_data.get('articles', [])[:60]
-    ]) or "No recent legal news found"
+    # Categorize and format news articles by age
+    articles_24h = [a for a in news_data.get('articles', []) if a.get('time_category') == '24h']
+    articles_7d = [a for a in news_data.get('articles', []) if a.get('time_category') == '7d']
+    articles_30d = [a for a in news_data.get('articles', []) if a.get('time_category') == '30d']
+
+    news_articles_str = "LAST 24 HOURS:\n"
+    news_articles_str += "\n".join([f"- {a.get('title', 'No title')}" for a in articles_24h[:20]]) or "No articles\n"
+
+    news_articles_str += "\n\nLAST 7 DAYS:\n"
+    news_articles_str += "\n".join([f"- {a.get('title', 'No title')}" for a in articles_7d[:20]]) or "No articles\n"
+
+    news_articles_str += "\n\nLAST 30 DAYS (Market Trends):\n"
+    news_articles_str += "\n".join([f"- {a.get('title', 'No title')}" for a in articles_30d[:20]]) or "No articles"
 
     data_summary = f"""
 DATA COLLECTED FROM AUSTRALIAN SOURCES:
@@ -448,27 +513,28 @@ Analyze this data from {datetime.now().strftime('%B %d, %Y')} (Australian source
 
 {data_summary}
 
-IMPORTANT INSTRUCTIONS:
+CRITICAL INSTRUCTIONS:
+- Articles are time-categorized: LAST 24 HOURS, LAST 7 DAYS, LAST 30 DAYS
+- **IMMEDIATE OPPORTUNITIES**: Only use articles from "LAST 24 HOURS" or "LAST 7 DAYS" sections
+- **MARKET TRENDS**: Use "LAST 30 DAYS" articles for trend analysis only, NOT as immediate opportunities
 - Pay special attention to ANY mentions of our watchlist companies
-- Even if data is limited, provide strategic insights based on what IS available
 - Cross-reference news items with our priority industries and keywords
-- Identify potential opportunities even in general legal news
-- If specific company data is scarce, note this and suggest proactive monitoring approaches
+- NEVER present 30+ day old news as "immediate" or "recent" opportunities
 
 Generate a concise morning briefing with:
 
 ## Executive Summary
-Provide 2-3 sentences highlighting the most significant developments. If limited data, summarize what WAS found and note key gaps requiring further monitoring.
+Provide 2-3 sentences highlighting developments from LAST 24 HOURS and LAST 7 DAYS ONLY.
 
-## High-Priority Opportunities
-List specific matters worth pursuing from the data above:
+## High-Priority Opportunities (Last 7 Days ONLY)
+List ONLY matters from the "LAST 24 HOURS" or "LAST 7 DAYS" sections:
  - Class actions (existing or potential)
  - ASIC/ACCC regulatory investigations
  - Insolvency and restructuring matters
  - Director liability issues
  - Major commercial disputes
 
-If no specific opportunities found, suggest areas to monitor based on industry trends.
+If no recent (7-day) opportunities found, state this clearly and explain why.
 
 ## Watchlist Company Activity
 Specifically identify ANY mentions of our {len(WATCHLIST_COMPANIES)} watchlist companies.

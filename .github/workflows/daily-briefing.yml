@@ -4,7 +4,7 @@ on:
   schedule:
     # Run at 6:00 AM AEST (Mon-Fri)
     # AEST is UTC+10, so 6 AM AEST = 8 PM UTC (previous day)
-    # Adjust based on daylight saving (AEDT is UTC+11)
+    # During AEDT (daylight saving), adjust to 7 PM UTC
     - cron: '0 20 * * 0-4'  # 6 AM AEST Mon-Fri (UTC 8 PM Sun-Thu)
   
   workflow_dispatch:  # Allow manual trigger for testing
@@ -30,11 +30,15 @@ jobs:
     - name: Generate Australian legal briefing
       env:
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+        EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+        EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+        SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+        SMTP_PORT: ${{ secrets.SMTP_PORT }}
       run: |
         python agent.py
     
-    - name: Upload briefing artifact
+    - name: Upload briefing artifact (backup)
       uses: actions/upload-artifact@v4
       if: always()
       with:
@@ -43,8 +47,7 @@ jobs:
           briefing*.txt
         retention-days: 90
     
-    - name: Display briefing summary
+    - name: Display completion status
       if: success()
       run: |
-        echo "Briefing generated successfully!"
-        echo "Check the uploaded artifacts to download the full briefing."
+        echo "✓ Briefing generated and emailed successfully!"

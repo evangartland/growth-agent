@@ -11,6 +11,9 @@ venv/
 # Briefing outputs (optional - can be tracked as artifacts)
 briefing_*.txt
 
+# Article tracking (prevent duplicates)
+seen_articles.json
+
 # Performance and error logs
 source_performance.json
 error_log.txt

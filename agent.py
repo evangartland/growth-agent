@@ -204,8 +204,12 @@ def fetch_google_news_rss(query, max_results=10, max_age_days=7, time_range='7d'
         time_range: Google News time range parameter: '1h', '1d', '7d', '1m'
     """
     try:
-        # Add time range to query to tell Google News to only return recent articles
-        time_filtered_query = f"{query} when:{time_range}"
+        # Calculate the cutoff date for filtering (e.g., 7 days ago)
+        cutoff_date = datetime.now() - timedelta(days=max_age_days)
+        date_str = cutoff_date.strftime('%Y-%m-%d')
+
+        # Use 'after:' parameter which Google News respects better than 'when:'
+        time_filtered_query = f"{query} after:{date_str}"
 
         # Google News RSS URL with Australian localization
         rss_url = f"https://news.google.com/rss/search?q={time_filtered_query.replace(' ', '+')}&hl=en-AU&gl=AU&ceid=AU:en"
@@ -223,52 +227,51 @@ def fetch_google_news_rss(query, max_results=10, max_age_days=7, time_range='7d'
         now = datetime.now(datetime.now().astimezone().tzinfo)
 
         # Find all item elements (fetch more to account for filtering)
-        items = soup.find_all('item', limit=max_results * 2)
+        items = soup.find_all('item', limit=max_results * 3)
 
         for item in items:
             title_elem = item.find('title')
             pubdate_elem = item.find('pubDate')
             link_elem = item.find('link')
 
-            if title_elem:
-                # Parse publication date and calculate age
-                age_days = None
-                time_category = 'unknown'
+            if title_elem and pubdate_elem:
+                try:
+                    # CRITICAL: Parse and validate the publication date
+                    pub_datetime = parsedate_to_datetime(pubdate_elem.get_text(strip=True))
+                    age_days = (now - pub_datetime).days
+                    age_hours = (now - pub_datetime).total_seconds() / 3600
 
-                if pubdate_elem:
-                    try:
-                        pub_datetime = parsedate_to_datetime(pubdate_elem.get_text(strip=True))
-                        age_days = (now - pub_datetime).days
-
-                        # Categorize by age
-                        if age_days <= 1:
-                            time_category = '24h'
-                        elif age_days <= 7:
-                            time_category = '7d'
-                        elif age_days <= 30:
-                            time_category = '30d'
-                        else:
-                            time_category = 'old'
-
-                        # Skip articles older than max_age_days
-                        if age_days > max_age_days:
-                            continue
-
-                    except Exception as e:
-                        # If date parsing fails, skip the article to be safe
+                    # STRICT filtering: Skip articles older than max_age_days
+                    if age_days > max_age_days:
                         continue
 
-                articles.append({
-                    'title': title_elem.get_text(strip=True),
-                    'source': 'Google News',
-                    'published': pubdate_elem.get_text(strip=True) if pubdate_elem else 'Recent',
-                    'link': link_elem.get_text(strip=True) if link_elem else '',
-                    'age_days': age_days,
-                    'time_category': time_category
-                })
+                    # Categorize by age
+                    if age_hours <= 24:
+                        time_category = '24h'
+                    elif age_days <= 7:
+                        time_category = '7d'
+                    elif age_days <= 30:
+                        time_category = '30d'
+                    else:
+                        time_category = 'old'
+
+                    articles.append({
+                        'title': title_elem.get_text(strip=True),
+                        'source': 'Google News',
+                        'published': pubdate_elem.get_text(strip=True),
+                        'link': link_elem.get_text(strip=True) if link_elem else '',
+                        'age_days': age_days,
+                        'age_hours': age_hours,
+                        'time_category': time_category,
+                        'pub_date': pub_datetime.strftime('%Y-%m-%d')
+                    })
+
+                except Exception as e:
+                    # If date parsing fails, skip the article completely
+                    continue
 
         # Sort by age (newest first) and limit to max_results
-        articles.sort(key=lambda x: x.get('age_days', 999))
+        articles.sort(key=lambda x: x.get('age_hours', 9999))
         articles = articles[:max_results]
 
         return {"articles": articles, "count": len(articles)}
@@ -330,9 +333,38 @@ def search_watchlist_companies():
     return {"articles": company_news, "count": len(company_news)}
 
 
+def load_seen_articles():
+    """Load previously seen article titles to avoid repeating old news"""
+    seen_file = 'seen_articles.json'
+    try:
+        if os.path.exists(seen_file):
+            with open(seen_file, 'r') as f:
+                data = json.load(f)
+                # Clean out entries older than 14 days
+                cutoff = (datetime.now() - timedelta(days=14)).strftime('%Y-%m-%d')
+                return {k: v for k, v in data.items() if v >= cutoff}
+        return {}
+    except:
+        return {}
+
+
+def save_seen_articles(seen_articles):
+    """Save seen article titles with date"""
+    seen_file = 'seen_articles.json'
+    try:
+        with open(seen_file, 'w') as f:
+            json.dump(seen_articles, f)
+    except Exception as e:
+        print(f"Warning: Could not save seen articles: {e}")
+
+
 def fetch_australian_legal_news():
     """Aggregate Australian legal news from multiple sources using Google News RSS with latest time filtering"""
     all_news = []
+
+    # Load previously seen articles to avoid duplicates
+    seen_articles = load_seen_articles()
+    print(f"  Loaded {len(seen_articles)} previously seen articles (last 14 days)")
 
     # GENERAL MARKET THEMES - LATEST NEWS (Last 7 days)
 
@@ -427,16 +459,33 @@ def fetch_australian_legal_news():
 
     print(f"\n  Total articles collected: {len(all_news)}")
 
-    # Deduplicate all articles by title before returning
+    # Deduplicate all articles by title AND filter out previously seen articles
+    today = datetime.now().strftime('%Y-%m-%d')
     seen_titles = set()
     unique_all_news = []
+    new_articles_count = 0
+
     for article in all_news:
         title = article.get('title', '')
         if title and title not in seen_titles:
+            # Check if we've seen this article before (in last 14 days)
+            if title in seen_articles:
+                # Skip articles we've already reported
+                continue
+
             seen_titles.add(title)
             unique_all_news.append(article)
 
+            # Mark as seen with today's date
+            seen_articles[title] = today
+            new_articles_count += 1
+
+    # Save updated seen articles list
+    save_seen_articles(seen_articles)
+
     print(f"  After deduplication: {len(unique_all_news)} unique articles")
+    print(f"  New articles (never seen before): {new_articles_count}")
+    print(f"  Total seen articles tracked: {len(seen_articles)}")
 
     return {
         "articles": unique_all_news[:150],  # Increased limit for comprehensive coverage

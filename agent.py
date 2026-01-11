@@ -302,7 +302,7 @@ def fetch_google_news_rss(query, max_results=10, max_age_days=7, time_range='7d'
 
 
 def search_watchlist_companies():
-    """Search for news about ALL watchlist companies - SIMPLE GENERAL GOOGLE NEWS SEARCHES"""
+    """Search for news about ALL watchlist companies - ENHANCED with multiple strategies"""
     company_news = []
 
     print(f"  Searching for all {len(WATCHLIST_COMPANIES)} watchlist companies (latest news)...")
@@ -310,27 +310,37 @@ def search_watchlist_companies():
     for i, company in enumerate(WATCHLIST_COMPANIES, 1):
         if company:
             try:
-                # SIMPLE Google News search - just company name + latest filter
-                # Using multiple simple variations to maximize coverage
+                # ENHANCED: Multiple search strategies to maximize coverage
                 queries = [
-                    f'{company} news australia',  # General news search
-                    f'{company} business',  # Business news
-                    f'{company} australia',  # General Australia search
+                    # Strategy 1: Direct company name searches
+                    f'{company}',  # Just the company name (broadest)
+                    f'{company} australia',  # Company + Australia
+                    f'{company} ASX',  # If listed on ASX
+
+                    # Strategy 2: Business activity searches
+                    f'{company} news',  # General news
+                    f'{company} announcement',  # Corporate announcements
+                    f'{company} contract',  # Business contracts
+
+                    # Strategy 3: Legal/regulatory searches (for this use case)
+                    f'{company} ASIC',  # Regulatory mentions
+                    f'{company} court',  # Legal proceedings
                 ]
 
                 company_articles = []
                 for query in queries:
                     # Get latest news (7 days) for each query
-                    results = fetch_google_news_rss(query, max_results=5, max_age_days=7, time_range='7d')
+                    results = fetch_google_news_rss(query, max_results=3, max_age_days=7, time_range='7d')
                     company_articles.extend(results.get('articles', []))
-                    time.sleep(0.3)  # Rate limiting between queries
+                    time.sleep(0.2)  # Faster rate between queries for same company
 
                 # Deduplicate by title
                 seen_titles = set()
                 unique_articles = []
                 for article in company_articles:
                     title = article.get('title', '')
-                    if title and title not in seen_titles:
+                    # Only include if company name actually appears in title (relevance check)
+                    if title and title not in seen_titles and company.lower() in title.lower():
                         seen_titles.add(title)
                         unique_articles.append(article)
 
@@ -340,11 +350,11 @@ def search_watchlist_companies():
                     age_7d = sum(1 for a in unique_articles if a.get('time_category') == '7d')
 
                     print(f"    [{i}/{len(WATCHLIST_COMPANIES)}] {company}: {len(unique_articles)} articles (24h:{age_24h} 7d:{age_7d})")
-                    company_news.extend(unique_articles[:10])  # Increased to top 10 per company
+                    company_news.extend(unique_articles[:10])  # Top 10 per company
                 else:
                     print(f"    [{i}/{len(WATCHLIST_COMPANIES)}] {company}: No news (last 7 days)")
 
-                time.sleep(0.2)  # Rate limiting between companies
+                time.sleep(0.3)  # Rate limiting between companies
 
             except Exception as e:
                 print(f"    Error searching for {company}: {e}")

@@ -13,6 +13,7 @@ import time
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.utils import parsedate_to_datetime
 
 # Companies to monitor closely (watchlist)
 WATCHLIST_COMPANIES = [
@@ -193,11 +194,26 @@ def fetch_austlii_recent_cases():
         return {"cases": [], "count": 0, "error": str(e)}
 
 
-def fetch_google_news_rss(query, max_results=10):
-    """Fetch news from Google News RSS feed using direct XML parsing"""
+def fetch_google_news_rss(query, max_results=10, max_age_days=7, time_range='7d'):
+    """Fetch news from Google News RSS feed with STRICT date filtering
+
+    Args:
+        query: Search query
+        max_results: Maximum number of results to return
+        max_age_days: Maximum age of articles in days (for post-filtering)
+        time_range: Google News time range parameter: '1h', '1d', '7d', '1m'
+    """
     try:
+        # Calculate the absolute cutoff date
+        now = datetime.now(datetime.now().astimezone().tzinfo)
+        cutoff_datetime = now - timedelta(days=max_age_days)
+        date_str = cutoff_datetime.strftime('%Y-%m-%d')
+
+        # Use 'after:' parameter which Google News respects better than 'when:'
+        time_filtered_query = f"{query} after:{date_str}"
+
         # Google News RSS URL with Australian localization
-        rss_url = f"https://news.google.com/rss/search?q={query.replace(' ', '+')}&hl=en-AU&gl=AU&ceid=AU:en"
+        rss_url = f"https://news.google.com/rss/search?q={time_filtered_query.replace(' ', '+')}&hl=en-AU&gl=AU&ceid=AU:en"
 
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
@@ -210,21 +226,73 @@ def fetch_google_news_rss(query, max_results=10):
         soup = BeautifulSoup(response.content, 'xml')
         articles = []
 
-        # Find all item elements in the RSS feed
-        items = soup.find_all('item', limit=max_results)
+        # Find all item elements (fetch more to account for filtering)
+        items = soup.find_all('item', limit=max_results * 3)
+
+        skipped_old = 0
+        skipped_no_date = 0
 
         for item in items:
             title_elem = item.find('title')
             pubdate_elem = item.find('pubDate')
             link_elem = item.find('link')
 
-            if title_elem:
+            # CRITICAL: Must have both title and date
+            if not title_elem or not pubdate_elem:
+                skipped_no_date += 1
+                continue
+
+            try:
+                # CRITICAL: Parse and validate the publication date
+                pub_datetime = parsedate_to_datetime(pubdate_elem.get_text(strip=True))
+
+                # Calculate precise age
+                age_seconds = (now - pub_datetime).total_seconds()
+                age_hours = age_seconds / 3600
+                age_days = age_seconds / 86400  # Use precise days calculation
+
+                # STRICT CUTOFF: Reject anything older than max_age_days
+                if age_days > max_age_days:
+                    skipped_old += 1
+                    continue
+
+                # Additional safety check: reject articles from before 2026
+                if pub_datetime.year < 2026:
+                    skipped_old += 1
+                    continue
+
+                # Categorize by age
+                if age_hours <= 24:
+                    time_category = '24h'
+                elif age_days <= 7:
+                    time_category = '7d'
+                else:
+                    time_category = 'old'
+
                 articles.append({
                     'title': title_elem.get_text(strip=True),
                     'source': 'Google News',
-                    'published': pubdate_elem.get_text(strip=True) if pubdate_elem else 'Recent',
-                    'link': link_elem.get_text(strip=True) if link_elem else ''
+                    'published': pubdate_elem.get_text(strip=True),
+                    'link': link_elem.get_text(strip=True) if link_elem else '',
+                    'age_days': round(age_days, 2),
+                    'age_hours': round(age_hours, 1),
+                    'time_category': time_category,
+                    'pub_date': pub_datetime.strftime('%Y-%m-%d %H:%M'),
+                    'pub_datetime': pub_datetime
                 })
+
+            except Exception as e:
+                # If date parsing fails, skip the article completely
+                skipped_no_date += 1
+                continue
+
+        # Sort by age (newest first) and limit to max_results
+        articles.sort(key=lambda x: x.get('age_hours', 9999))
+        articles = articles[:max_results]
+
+        # Debug info
+        if skipped_old > 0 or skipped_no_date > 0:
+            print(f"    [{query[:30]}...] Filtered: {skipped_old} old, {skipped_no_date} no date")
 
         return {"articles": articles, "count": len(articles)}
 
@@ -234,25 +302,49 @@ def fetch_google_news_rss(query, max_results=10):
 
 
 def search_watchlist_companies():
-    """Search for news about ALL watchlist companies using Google News RSS"""
+    """Search for news about ALL watchlist companies - SIMPLE GENERAL GOOGLE NEWS SEARCHES"""
     company_news = []
 
-    print(f"  Searching for all {len(WATCHLIST_COMPANIES)} watchlist companies...")
+    print(f"  Searching for all {len(WATCHLIST_COMPANIES)} watchlist companies (latest news)...")
 
     for i, company in enumerate(WATCHLIST_COMPANIES, 1):
         if company:
             try:
-                # Search for company news with Australian legal/business context
-                query = f'"{company}" australia (legal OR business OR court OR ASIC OR regulatory OR insolvency)'
-                results = fetch_google_news_rss(query, max_results=5)
+                # SIMPLE Google News search - just company name + latest filter
+                # Using multiple simple variations to maximize coverage
+                queries = [
+                    f'{company} news australia',  # General news search
+                    f'{company} business',  # Business news
+                    f'{company} australia',  # General Australia search
+                ]
 
-                if results.get('count', 0) > 0:
-                    print(f"    [{i}/{len(WATCHLIST_COMPANIES)}] {company}: {results.get('count', 0)} articles")
-                    company_news.extend(results.get('articles', []))
+                company_articles = []
+                for query in queries:
+                    # Get latest news (7 days) for each query
+                    results = fetch_google_news_rss(query, max_results=5, max_age_days=7, time_range='7d')
+                    company_articles.extend(results.get('articles', []))
+                    time.sleep(0.3)  # Rate limiting between queries
+
+                # Deduplicate by title
+                seen_titles = set()
+                unique_articles = []
+                for article in company_articles:
+                    title = article.get('title', '')
+                    if title and title not in seen_titles:
+                        seen_titles.add(title)
+                        unique_articles.append(article)
+
+                if len(unique_articles) > 0:
+                    # Show age breakdown
+                    age_24h = sum(1 for a in unique_articles if a.get('time_category') == '24h')
+                    age_7d = sum(1 for a in unique_articles if a.get('time_category') == '7d')
+
+                    print(f"    [{i}/{len(WATCHLIST_COMPANIES)}] {company}: {len(unique_articles)} articles (24h:{age_24h} 7d:{age_7d})")
+                    company_news.extend(unique_articles[:10])  # Increased to top 10 per company
                 else:
-                    print(f"    [{i}/{len(WATCHLIST_COMPANIES)}] {company}: No news")
+                    print(f"    [{i}/{len(WATCHLIST_COMPANIES)}] {company}: No news (last 7 days)")
 
-                time.sleep(0.3)  # Rate limiting - be respectful
+                time.sleep(0.2)  # Rate limiting between companies
 
             except Exception as e:
                 print(f"    Error searching for {company}: {e}")
@@ -261,94 +353,163 @@ def search_watchlist_companies():
     return {"articles": company_news, "count": len(company_news)}
 
 
+def load_seen_articles():
+    """Load previously seen article titles to avoid repeating old news"""
+    seen_file = 'seen_articles.json'
+    try:
+        if os.path.exists(seen_file):
+            with open(seen_file, 'r') as f:
+                data = json.load(f)
+                # Clean out entries older than 14 days
+                cutoff = (datetime.now() - timedelta(days=14)).strftime('%Y-%m-%d')
+                return {k: v for k, v in data.items() if v >= cutoff}
+        return {}
+    except:
+        return {}
+
+
+def save_seen_articles(seen_articles):
+    """Save seen article titles with date"""
+    seen_file = 'seen_articles.json'
+    try:
+        with open(seen_file, 'w') as f:
+            json.dump(seen_articles, f)
+    except Exception as e:
+        print(f"Warning: Could not save seen articles: {e}")
+
+
 def fetch_australian_legal_news():
-    """Aggregate Australian legal news from multiple sources using Google News RSS"""
+    """Aggregate Australian legal news from multiple sources using Google News RSS with latest time filtering"""
     all_news = []
 
-    # GENERAL MARKET THEMES (using Google News RSS)
+    # Load previously seen articles to avoid duplicates
+    seen_articles = load_seen_articles()
+    print(f"  Loaded {len(seen_articles)} previously seen articles (last 14 days)")
 
-    # 1. Class actions and litigation
-    print("  - Class actions & litigation...")
-    class_action_results = fetch_google_news_rss("australia class action litigation court", max_results=10)
+    # GENERAL MARKET THEMES - LATEST NEWS (Last 7 days)
+
+    # 0. Latest Australian business news (general scan)
+    print("  - Latest Australian business news (7d)...")
+    aus_business = fetch_google_news_rss("australia business news", max_results=15, max_age_days=7, time_range='7d')
+    all_news.extend(aus_business.get('articles', []))
+    time.sleep(0.5)
+
+    # 0a. Latest Australian corporate news
+    print("  - Latest Australian corporate news (7d)...")
+    aus_corporate = fetch_google_news_rss("australia corporate news ASX", max_results=15, max_age_days=7, time_range='7d')
+    all_news.extend(aus_corporate.get('articles', []))
+    time.sleep(0.5)
+
+    # 1. Class actions and litigation (LATEST)
+    print("  - Class actions & litigation (latest 7d)...")
+    class_action_results = fetch_google_news_rss("australia class action litigation court", max_results=10, max_age_days=7, time_range='7d')
     all_news.extend(class_action_results.get('articles', []))
     time.sleep(0.5)
 
-    # 2. Insolvency and restructuring - EXPANDED
-    print("  - Insolvency & restructuring...")
-    insolvency_results = fetch_google_news_rss("australia insolvency administration liquidation receivership", max_results=10)
+    # 2. Insolvency and restructuring - LATEST
+    print("  - Insolvency & restructuring (latest 7d)...")
+    insolvency_results = fetch_google_news_rss("australia insolvency administration liquidation receivership", max_results=10, max_age_days=7, time_range='7d')
     all_news.extend(insolvency_results.get('articles', []))
     time.sleep(0.5)
 
-    # 2a. State-based insolvency appointments
-    print("  - State insolvency appointments...")
-    state_insolvency = fetch_google_news_rss("australia appointed administrator receiver liquidator", max_results=8)
+    # 2a. State-based insolvency appointments (LATEST)
+    print("  - State insolvency appointments (latest 7d)...")
+    state_insolvency = fetch_google_news_rss("australia appointed administrator receiver liquidator", max_results=8, max_age_days=7, time_range='7d')
     all_news.extend(state_insolvency.get('articles', []))
     time.sleep(0.5)
 
-    # 2b. Voluntary administration and DOCA
-    print("  - Voluntary administration...")
-    va_results = fetch_google_news_rss("australia voluntary administration DOCA deed company arrangement", max_results=8)
+    # 2b. Voluntary administration and DOCA (LATEST)
+    print("  - Voluntary administration (latest 7d)...")
+    va_results = fetch_google_news_rss("australia voluntary administration DOCA", max_results=8, max_age_days=7, time_range='7d')
     all_news.extend(va_results.get('articles', []))
     time.sleep(0.5)
 
-    # 3. Supreme Court winding up applications
-    print("  - Supreme Court winding up...")
-    supreme_court_results = fetch_google_news_rss("australia supreme court winding up application", max_results=8)
+    # 3. Supreme Court winding up applications (LATEST)
+    print("  - Supreme Court winding up (latest 7d)...")
+    supreme_court_results = fetch_google_news_rss("australia supreme court winding up", max_results=8, max_age_days=7, time_range='7d')
     all_news.extend(supreme_court_results.get('articles', []))
     time.sleep(0.5)
 
-    # 4. ASIC enforcement and regulatory - EXPANDED
-    print("  - ASIC enforcement...")
-    asic_results = fetch_google_news_rss("australia ASIC enforcement investigation regulatory", max_results=10)
+    # 4. ASIC enforcement and regulatory (LATEST)
+    print("  - ASIC enforcement (latest 7d)...")
+    asic_results = fetch_google_news_rss("australia ASIC enforcement investigation", max_results=10, max_age_days=7, time_range='7d')
     all_news.extend(asic_results.get('articles', []))
     time.sleep(0.5)
 
-    # 4a. ASIC banning orders and disqualifications
-    print("  - ASIC bans & disqualifications...")
-    asic_bans = fetch_google_news_rss("australia ASIC banned disqualified director", max_results=8)
+    # 4a. ASIC banning orders and disqualifications (LATEST)
+    print("  - ASIC bans & disqualifications (latest 7d)...")
+    asic_bans = fetch_google_news_rss("australia ASIC banned disqualified director", max_results=8, max_age_days=7, time_range='7d')
     all_news.extend(asic_bans.get('articles', []))
     time.sleep(0.5)
 
-    # 5. ACCC and competition law
-    print("  - ACCC & competition...")
-    accc_results = fetch_google_news_rss("australia ACCC enforcement competition consumer", max_results=10)
+    # 5. ACCC and competition law (LATEST)
+    print("  - ACCC & competition (latest 7d)...")
+    accc_results = fetch_google_news_rss("australia ACCC enforcement competition consumer", max_results=10, max_age_days=7, time_range='7d')
     all_news.extend(accc_results.get('articles', []))
     time.sleep(0.5)
 
-    # 6. Corporate disputes and M&A
-    print("  - Corporate disputes...")
-    corporate_results = fetch_google_news_rss("australia corporate dispute merger acquisition takeover", max_results=10)
+    # 6. Corporate disputes and M&A (LATEST)
+    print("  - Corporate disputes (latest 7d)...")
+    corporate_results = fetch_google_news_rss("australia corporate dispute merger acquisition", max_results=10, max_age_days=7, time_range='7d')
     all_news.extend(corporate_results.get('articles', []))
     time.sleep(0.5)
 
-    # 7. Director liability and governance - EXPANDED
-    print("  - Director liability...")
-    director_results = fetch_google_news_rss("australia director liability governance breach duty", max_results=8)
+    # 7. Director liability and governance (LATEST)
+    print("  - Director liability (latest 7d)...")
+    director_results = fetch_google_news_rss("australia director liability governance breach", max_results=8, max_age_days=7, time_range='7d')
     all_news.extend(director_results.get('articles', []))
     time.sleep(0.5)
 
-    # 7a. Director resignations
-    print("  - Director resignations...")
-    director_resign = fetch_google_news_rss("australia director resigned stepping down departure", max_results=8)
+    # 7a. Director resignations (LATEST)
+    print("  - Director resignations (latest 7d)...")
+    director_resign = fetch_google_news_rss("australia director resigned stepping down", max_results=8, max_age_days=7, time_range='7d')
     all_news.extend(director_resign.get('articles', []))
     time.sleep(0.5)
 
-    # 8. Trading while insolvent and phoenix activity
-    print("  - Insolvent trading...")
-    insolvent_trading = fetch_google_news_rss("australia insolvent trading phoenix activity director penalty", max_results=8)
+    # 8. Trading while insolvent and phoenix activity (LATEST)
+    print("  - Insolvent trading (latest 7d)...")
+    insolvent_trading = fetch_google_news_rss("australia insolvent trading phoenix director penalty", max_results=8, max_age_days=7, time_range='7d')
     all_news.extend(insolvent_trading.get('articles', []))
     time.sleep(0.5)
 
-    # WATCHLIST COMPANIES (all 31 companies)
-    print("  - Watchlist company news (all 31 companies)...")
+    # WATCHLIST COMPANIES (all 31 companies - LATEST 7 days)
+    print("  - Watchlist company news (all 31 companies, latest 7d)...")
     watchlist_results = search_watchlist_companies()
     all_news.extend(watchlist_results.get('articles', []))
 
     print(f"\n  Total articles collected: {len(all_news)}")
 
+    # Deduplicate all articles by title AND filter out previously seen articles
+    today = datetime.now().strftime('%Y-%m-%d')
+    seen_titles = set()
+    unique_all_news = []
+    new_articles_count = 0
+
+    for article in all_news:
+        title = article.get('title', '')
+        if title and title not in seen_titles:
+            # Check if we've seen this article before (in last 14 days)
+            if title in seen_articles:
+                # Skip articles we've already reported
+                continue
+
+            seen_titles.add(title)
+            unique_all_news.append(article)
+
+            # Mark as seen with today's date
+            seen_articles[title] = today
+            new_articles_count += 1
+
+    # Save updated seen articles list
+    save_seen_articles(seen_articles)
+
+    print(f"  After deduplication: {len(unique_all_news)} unique articles")
+    print(f"  New articles (never seen before): {new_articles_count}")
+    print(f"  Total seen articles tracked: {len(seen_articles)}")
+
     return {
-        "articles": all_news[:120],  # Increased limit to accommodate expanded sources
-        "count": len(all_news[:120])
+        "articles": unique_all_news[:150],  # Increased limit for comprehensive coverage
+        "count": len(unique_all_news[:150])
     }
 
 
@@ -405,11 +566,24 @@ def generate_briefing():
         for c in austlii_data.get('cases', [])[:10]
     ]) or "No recent cases found"
 
-    # Format news articles (showing top 60 out of up to 120 collected)
-    news_articles_str = "\n".join([
-        f"- {article.get('title', 'No title')}"
-        for article in news_data.get('articles', [])[:60]
-    ]) or "No recent legal news found"
+    # Categorize and format news articles by age (LATEST 7 DAYS ONLY)
+    articles_24h = [a for a in news_data.get('articles', []) if a.get('time_category') == '24h']
+    articles_7d = [a for a in news_data.get('articles', []) if a.get('time_category') == '7d']
+
+    print(f"  Article breakdown: 24h={len(articles_24h)}, 7d={len(articles_7d)}")
+
+    # Show publication dates to verify recency
+    news_articles_str = "LAST 24 HOURS (IMMEDIATE OPPORTUNITIES):\n"
+    news_articles_str += "\n".join([
+        f"- [{a.get('pub_date', 'Unknown date')}] {a.get('title', 'No title')}"
+        for a in articles_24h[:30]
+    ]) or "No articles in last 24 hours\n"
+
+    news_articles_str += "\n\nLAST 2-7 DAYS (RECENT DEVELOPMENTS):\n"
+    news_articles_str += "\n".join([
+        f"- [{a.get('pub_date', 'Unknown date')}] {a.get('title', 'No title')}"
+        for a in articles_7d[:30]
+    ]) or "No articles from 2-7 days ago"
 
     data_summary = f"""
 DATA COLLECTED FROM AUSTRALIAN SOURCES:
@@ -448,27 +622,30 @@ Analyze this data from {datetime.now().strftime('%B %d, %Y')} (Australian source
 
 {data_summary}
 
-IMPORTANT INSTRUCTIONS:
+CRITICAL INSTRUCTIONS - LATEST NEWS ONLY:
+- ALL articles are from the LAST 7 DAYS maximum (nothing older)
+- Articles are categorized: "LAST 24 HOURS" and "LAST 2-7 DAYS"
+- **IMMEDIATE OPPORTUNITIES**: Prioritize "LAST 24 HOURS" section
+- **RECENT DEVELOPMENTS**: Use "LAST 2-7 DAYS" section
+- Every article is fresh and current - treat all as actionable intelligence
 - Pay special attention to ANY mentions of our watchlist companies
-- Even if data is limited, provide strategic insights based on what IS available
 - Cross-reference news items with our priority industries and keywords
-- Identify potential opportunities even in general legal news
-- If specific company data is scarce, note this and suggest proactive monitoring approaches
 
 Generate a concise morning briefing with:
 
 ## Executive Summary
-Provide 2-3 sentences highlighting the most significant developments. If limited data, summarize what WAS found and note key gaps requiring further monitoring.
+Provide 2-3 sentences highlighting the most significant developments from the last 7 days.
+Prioritize anything from the last 24 hours.
 
-## High-Priority Opportunities
-List specific matters worth pursuing from the data above:
+## High-Priority Opportunities (This Week)
+List specific matters worth pursuing from the data:
  - Class actions (existing or potential)
  - ASIC/ACCC regulatory investigations
  - Insolvency and restructuring matters
  - Director liability issues
  - Major commercial disputes
 
-If no specific opportunities found, suggest areas to monitor based on industry trends.
+Prioritize opportunities from "LAST 24 HOURS" section. All news is current and actionable.
 
 ## Watchlist Company Activity
 Specifically identify ANY mentions of our {len(WATCHLIST_COMPANIES)} watchlist companies.

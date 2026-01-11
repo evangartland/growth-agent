@@ -195,7 +195,7 @@ def fetch_austlii_recent_cases():
 
 
 def fetch_google_news_rss(query, max_results=10, max_age_days=7, time_range='7d'):
-    """Fetch news from Google News RSS feed with date filtering
+    """Fetch news from Google News RSS feed with STRICT date filtering
 
     Args:
         query: Search query
@@ -204,9 +204,10 @@ def fetch_google_news_rss(query, max_results=10, max_age_days=7, time_range='7d'
         time_range: Google News time range parameter: '1h', '1d', '7d', '1m'
     """
     try:
-        # Calculate the cutoff date for filtering (e.g., 7 days ago)
-        cutoff_date = datetime.now() - timedelta(days=max_age_days)
-        date_str = cutoff_date.strftime('%Y-%m-%d')
+        # Calculate the absolute cutoff date
+        now = datetime.now(datetime.now().astimezone().tzinfo)
+        cutoff_datetime = now - timedelta(days=max_age_days)
+        date_str = cutoff_datetime.strftime('%Y-%m-%d')
 
         # Use 'after:' parameter which Google News respects better than 'when:'
         time_filtered_query = f"{query} after:{date_str}"
@@ -224,55 +225,74 @@ def fetch_google_news_rss(query, max_results=10, max_age_days=7, time_range='7d'
         # Parse XML RSS feed
         soup = BeautifulSoup(response.content, 'xml')
         articles = []
-        now = datetime.now(datetime.now().astimezone().tzinfo)
 
         # Find all item elements (fetch more to account for filtering)
         items = soup.find_all('item', limit=max_results * 3)
+
+        skipped_old = 0
+        skipped_no_date = 0
 
         for item in items:
             title_elem = item.find('title')
             pubdate_elem = item.find('pubDate')
             link_elem = item.find('link')
 
-            if title_elem and pubdate_elem:
-                try:
-                    # CRITICAL: Parse and validate the publication date
-                    pub_datetime = parsedate_to_datetime(pubdate_elem.get_text(strip=True))
-                    age_days = (now - pub_datetime).days
-                    age_hours = (now - pub_datetime).total_seconds() / 3600
+            # CRITICAL: Must have both title and date
+            if not title_elem or not pubdate_elem:
+                skipped_no_date += 1
+                continue
 
-                    # STRICT filtering: Skip articles older than max_age_days
-                    if age_days > max_age_days:
-                        continue
+            try:
+                # CRITICAL: Parse and validate the publication date
+                pub_datetime = parsedate_to_datetime(pubdate_elem.get_text(strip=True))
 
-                    # Categorize by age
-                    if age_hours <= 24:
-                        time_category = '24h'
-                    elif age_days <= 7:
-                        time_category = '7d'
-                    elif age_days <= 30:
-                        time_category = '30d'
-                    else:
-                        time_category = 'old'
+                # Calculate precise age
+                age_seconds = (now - pub_datetime).total_seconds()
+                age_hours = age_seconds / 3600
+                age_days = age_seconds / 86400  # Use precise days calculation
 
-                    articles.append({
-                        'title': title_elem.get_text(strip=True),
-                        'source': 'Google News',
-                        'published': pubdate_elem.get_text(strip=True),
-                        'link': link_elem.get_text(strip=True) if link_elem else '',
-                        'age_days': age_days,
-                        'age_hours': age_hours,
-                        'time_category': time_category,
-                        'pub_date': pub_datetime.strftime('%Y-%m-%d')
-                    })
-
-                except Exception as e:
-                    # If date parsing fails, skip the article completely
+                # STRICT CUTOFF: Reject anything older than max_age_days
+                if age_days > max_age_days:
+                    skipped_old += 1
                     continue
+
+                # Additional safety check: reject articles from before 2026
+                if pub_datetime.year < 2026:
+                    skipped_old += 1
+                    continue
+
+                # Categorize by age
+                if age_hours <= 24:
+                    time_category = '24h'
+                elif age_days <= 7:
+                    time_category = '7d'
+                else:
+                    time_category = 'old'
+
+                articles.append({
+                    'title': title_elem.get_text(strip=True),
+                    'source': 'Google News',
+                    'published': pubdate_elem.get_text(strip=True),
+                    'link': link_elem.get_text(strip=True) if link_elem else '',
+                    'age_days': round(age_days, 2),
+                    'age_hours': round(age_hours, 1),
+                    'time_category': time_category,
+                    'pub_date': pub_datetime.strftime('%Y-%m-%d %H:%M'),
+                    'pub_datetime': pub_datetime
+                })
+
+            except Exception as e:
+                # If date parsing fails, skip the article completely
+                skipped_no_date += 1
+                continue
 
         # Sort by age (newest first) and limit to max_results
         articles.sort(key=lambda x: x.get('age_hours', 9999))
         articles = articles[:max_results]
+
+        # Debug info
+        if skipped_old > 0 or skipped_no_date > 0:
+            print(f"    [{query[:30]}...] Filtered: {skipped_old} old, {skipped_no_date} no date")
 
         return {"articles": articles, "count": len(articles)}
 
@@ -552,11 +572,18 @@ def generate_briefing():
 
     print(f"  Article breakdown: 24h={len(articles_24h)}, 7d={len(articles_7d)}")
 
+    # Show publication dates to verify recency
     news_articles_str = "LAST 24 HOURS (IMMEDIATE OPPORTUNITIES):\n"
-    news_articles_str += "\n".join([f"- {a.get('title', 'No title')}" for a in articles_24h[:30]]) or "No articles in last 24 hours\n"
+    news_articles_str += "\n".join([
+        f"- [{a.get('pub_date', 'Unknown date')}] {a.get('title', 'No title')}"
+        for a in articles_24h[:30]
+    ]) or "No articles in last 24 hours\n"
 
     news_articles_str += "\n\nLAST 2-7 DAYS (RECENT DEVELOPMENTS):\n"
-    news_articles_str += "\n".join([f"- {a.get('title', 'No title')}" for a in articles_7d[:30]]) or "No articles from 2-7 days ago"
+    news_articles_str += "\n".join([
+        f"- [{a.get('pub_date', 'Unknown date')}] {a.get('title', 'No title')}"
+        for a in articles_7d[:30]
+    ]) or "No articles from 2-7 days ago"
 
     data_summary = f"""
 DATA COLLECTED FROM AUSTRALIAN SOURCES:

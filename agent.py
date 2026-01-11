@@ -279,26 +279,28 @@ def fetch_google_news_rss(query, max_results=10, max_age_days=7, time_range='7d'
 
 
 def search_watchlist_companies():
-    """Search for news about ALL watchlist companies using Google News RSS - LATEST 7 DAYS ONLY"""
+    """Search for news about ALL watchlist companies - SIMPLE GENERAL GOOGLE NEWS SEARCHES"""
     company_news = []
 
-    print(f"  Searching for all {len(WATCHLIST_COMPANIES)} watchlist companies (latest 7 days)...")
+    print(f"  Searching for all {len(WATCHLIST_COMPANIES)} watchlist companies (latest news)...")
 
     for i, company in enumerate(WATCHLIST_COMPANIES, 1):
         if company:
             try:
-                # Try multiple search variations to maximize results - LATEST 7 DAYS
+                # SIMPLE Google News search - just company name + latest filter
+                # Using multiple simple variations to maximize coverage
                 queries = [
-                    f'"{company}" australia',  # General Australia news
-                    f'"{company}"',  # Company mentions anywhere (filtered to AU by RSS settings)
+                    f'{company} news australia',  # General news search
+                    f'{company} business',  # Business news
+                    f'{company} australia',  # General Australia search
                 ]
 
                 company_articles = []
                 for query in queries:
-                    # Use 7-day time range for watchlist companies
-                    results = fetch_google_news_rss(query, max_results=3, max_age_days=7, time_range='7d')
+                    # Get latest news (7 days) for each query
+                    results = fetch_google_news_rss(query, max_results=5, max_age_days=7, time_range='7d')
                     company_articles.extend(results.get('articles', []))
-                    time.sleep(0.2)
+                    time.sleep(0.3)  # Rate limiting between queries
 
                 # Deduplicate by title
                 seen_titles = set()
@@ -315,11 +317,11 @@ def search_watchlist_companies():
                     age_7d = sum(1 for a in unique_articles if a.get('time_category') == '7d')
 
                     print(f"    [{i}/{len(WATCHLIST_COMPANIES)}] {company}: {len(unique_articles)} articles (24h:{age_24h} 7d:{age_7d})")
-                    company_news.extend(unique_articles[:5])  # Limit to top 5 per company
+                    company_news.extend(unique_articles[:10])  # Increased to top 10 per company
                 else:
                     print(f"    [{i}/{len(WATCHLIST_COMPANIES)}] {company}: No news (last 7 days)")
 
-                time.sleep(0.3)  # Rate limiting
+                time.sleep(0.2)  # Rate limiting between companies
 
             except Exception as e:
                 print(f"    Error searching for {company}: {e}")
@@ -333,6 +335,18 @@ def fetch_australian_legal_news():
     all_news = []
 
     # GENERAL MARKET THEMES - LATEST NEWS (Last 7 days)
+
+    # 0. Latest Australian business news (general scan)
+    print("  - Latest Australian business news (7d)...")
+    aus_business = fetch_google_news_rss("australia business news", max_results=15, max_age_days=7, time_range='7d')
+    all_news.extend(aus_business.get('articles', []))
+    time.sleep(0.5)
+
+    # 0a. Latest Australian corporate news
+    print("  - Latest Australian corporate news (7d)...")
+    aus_corporate = fetch_google_news_rss("australia corporate news ASX", max_results=15, max_age_days=7, time_range='7d')
+    all_news.extend(aus_corporate.get('articles', []))
+    time.sleep(0.5)
 
     # 1. Class actions and litigation (LATEST)
     print("  - Class actions & litigation (latest 7d)...")
@@ -413,9 +427,20 @@ def fetch_australian_legal_news():
 
     print(f"\n  Total articles collected: {len(all_news)}")
 
+    # Deduplicate all articles by title before returning
+    seen_titles = set()
+    unique_all_news = []
+    for article in all_news:
+        title = article.get('title', '')
+        if title and title not in seen_titles:
+            seen_titles.add(title)
+            unique_all_news.append(article)
+
+    print(f"  After deduplication: {len(unique_all_news)} unique articles")
+
     return {
-        "articles": all_news[:120],  # Increased limit to accommodate expanded sources
-        "count": len(all_news[:120])
+        "articles": unique_all_news[:150],  # Increased limit for comprehensive coverage
+        "count": len(unique_all_news[:150])
     }
 
 

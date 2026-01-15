@@ -11,6 +11,7 @@ import json
 from bs4 import BeautifulSoup
 import time
 import smtplib
+import re
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import parsedate_to_datetime
@@ -1052,6 +1053,50 @@ Be direct and practical - this briefing drives business development decisions an
     return message.content[0].text
 
 
+def format_briefing_html(briefing_content):
+    """Convert briefing markdown to beautifully formatted HTML"""
+    # Escape HTML special characters first
+    content = briefing_content.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+    # Convert markdown headings to styled HTML
+    # ## Heading -> <h2>
+    content = re.sub(r'^## (.+)$', r'<h2 style="text-decoration: underline; color: #1a1a1a; margin-top: 25px; margin-bottom: 15px; font-size: 14pt; font-weight: bold;">\1</h2>', content, flags=re.MULTILINE)
+
+    # ### Sub-heading -> <h3>
+    content = re.sub(r'^### (.+)$', r'<h3 style="text-decoration: underline; color: #2c3e50; margin-top: 20px; margin-bottom: 10px; font-size: 11pt; font-weight: bold;">\1</h3>', content, flags=re.MULTILINE)
+
+    # Bold **text** or company names in ALL CAPS
+    content = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', content)
+
+    # Bold section labels (e.g., "Overview:", "Estimated Legal Fees:")
+    content = re.sub(r'^(\w[\w\s&]+?):', r'<strong>\1:</strong>', content, flags=re.MULTILINE)
+
+    # Bold company names (watchlist companies)
+    for company in WATCHLIST_COMPANIES:
+        if company:
+            # Bold the company name wherever it appears
+            content = re.sub(rf'\b({re.escape(company)})\b', r'<strong>\1</strong>', content, flags=re.IGNORECASE)
+
+    # Convert bullet points
+    content = re.sub(r'^- (.+)$', r'<li style="margin-bottom: 8px;">\1</li>', content, flags=re.MULTILINE)
+
+    # Wrap consecutive <li> items in <ul>
+    content = re.sub(r'(<li.+?</li>)(\n<li.+?</li>)+', lambda m: '<ul style="margin-left: 20px; margin-bottom: 15px;">' + m.group(0) + '</ul>', content, flags=re.DOTALL)
+
+    # Convert links to clickable links
+    content = re.sub(r'(https?://[^\s<]+)', r'<a href="\1" style="color: #0066cc; text-decoration: none;">\1</a>', content)
+
+    # Add line breaks for better spacing
+    content = content.replace('\n\n', '<br><br>')
+    content = content.replace('\n', '<br>')
+
+    # Highlight priority indicators
+    content = re.sub(r'\b(HIGH|URGENT|IMMEDIATE)\b', r'<span style="background-color: #fff3cd; padding: 2px 6px; border-radius: 3px; font-weight: bold;">\1</span>', content, flags=re.IGNORECASE)
+    content = re.sub(r'\b(OVERALL PRIORITY: High)\b', r'<span style="background-color: #ffebee; color: #c62828; padding: 2px 6px; border-radius: 3px; font-weight: bold;">\1</span>', content, flags=re.IGNORECASE)
+
+    return content
+
+
 def save_briefing(briefing_content):
     """Save briefing to file"""
     timestamp = datetime.now().strftime('%Y-%m-%d')
@@ -1094,28 +1139,130 @@ def send_email(briefing_content, filename):
         # Plain text version
         text_content = briefing_content
 
-        # HTML version with better formatting
-        html_content = f"""
-        <html>
-        <head>
-            <style>
-                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-                h1 {{ color: #1a1a1a; border-bottom: 2px solid #0066cc; padding-bottom: 10px; }}
-                h2 {{ color: #0066cc; margin-top: 20px; }}
-                ul {{ margin-left: 20px; }}
-                .highlight {{ background-color: #fff3cd; padding: 2px 5px; }}
-                .footer {{ margin-top: 30px; padding-top: 20px; border-top: 1px solid #ccc; font-size: 12px; color: #666; }}
-            </style>
-        </head>
-        <body>
-            <pre style="font-family: Arial, sans-serif; white-space: pre-wrap; word-wrap: break-word;">{briefing_content}</pre>
-            <div class="footer">
-                <p>Australian Legal Intelligence Briefing - Automated Daily Report</p>
-                <p>Generated: {datetime.now().strftime('%B %d, %Y at %H:%M AEST')}</p>
-            </div>
-        </body>
-        </html>
-        """
+        # HTML version with professional formatting
+        formatted_content = format_briefing_html(briefing_content)
+
+        html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {{
+            font-family: Arial, sans-serif;
+            font-size: 10pt;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f9f9f9;
+            margin: 0;
+            padding: 20px;
+        }}
+        .container {{
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            padding: 30px;
+            border: 1px solid #ddd;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+        .header {{
+            background-color: #1a1a1a;
+            color: #ffffff;
+            padding: 20px;
+            margin: -30px -30px 30px -30px;
+            border-bottom: 4px solid #0066cc;
+        }}
+        .header h1 {{
+            margin: 0;
+            font-size: 16pt;
+            font-weight: bold;
+        }}
+        .header .date {{
+            margin: 5px 0 0 0;
+            font-size: 9pt;
+            color: #cccccc;
+        }}
+        h2 {{
+            color: #1a1a1a;
+            text-decoration: underline;
+            margin-top: 25px;
+            margin-bottom: 15px;
+            font-size: 14pt;
+            font-weight: bold;
+        }}
+        h3 {{
+            color: #2c3e50;
+            text-decoration: underline;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            font-size: 11pt;
+            font-weight: bold;
+        }}
+        strong {{
+            font-weight: bold;
+            color: #1a1a1a;
+        }}
+        a {{
+            color: #0066cc;
+            text-decoration: none;
+        }}
+        a:hover {{
+            text-decoration: underline;
+        }}
+        ul {{
+            margin-left: 20px;
+            margin-bottom: 15px;
+        }}
+        li {{
+            margin-bottom: 8px;
+        }}
+        .footer {{
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 2px solid #e0e0e0;
+            font-size: 8pt;
+            color: #666;
+            text-align: center;
+        }}
+        .priority-high {{
+            background-color: #ffebee;
+            color: #c62828;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: bold;
+        }}
+        .priority-medium {{
+            background-color: #fff3e0;
+            color: #ef6c00;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: bold;
+        }}
+        .highlight {{
+            background-color: #fff3cd;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: bold;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Australian Legal Intelligence Briefing</h1>
+            <div class="date">Generated: {datetime.now().strftime('%B %d, %Y at %H:%M AEST')}</div>
+        </div>
+        <div class="content">
+            {formatted_content}
+        </div>
+        <div class="footer">
+            <p><strong>Australian Legal Intelligence Briefing</strong> - Automated Daily Report</p>
+            <p>Monitoring {len([c for c in WATCHLIST_COMPANIES if c.strip()])} companies across {len(PRIORITY_INDUSTRIES)} priority industries</p>
+            <p>Sources: ASIC, ACCC, Federal Court, Supreme Courts, AustLII, PPSR, News Media</p>
+        </div>
+    </div>
+</body>
+</html>"""
 
         # Attach both versions
         part1 = MIMEText(text_content, 'plain')

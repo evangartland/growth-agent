@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Corporate Law Intelligence Briefing - Sign Up</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            color: #1a202c;
+            font-size: 28px;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .header p {
+            color: #718096;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        .form-group label {
+            display: block;
+            color: #2d3748;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .form-group label .required {
+            color: #e53e3e;
+            margin-left: 4px;
+        }
+
+        .form-group select,
+        .form-group input[type="text"],
+        .form-group input[type="email"],
+        .form-group textarea {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 15px;
+            font-family: inherit;
+            transition: all 0.3s ease;
+            background-color: #f7fafc;
+        }
+
+        .form-group select:focus,
+        .form-group input[type="text"]:focus,
+        .form-group input[type="email"]:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            background-color: white;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .form-group small {
+            display: block;
+            margin-top: 6px;
+            color: #718096;
+            font-size: 13px;
+        }
+
+        .submit-btn {
+            width: 100%;
+            padding: 14px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            margin-top: 10px;
+        }
+
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .submit-btn:active {
+            transform: translateY(0);
+        }
+
+        .features {
+            margin-top: 30px;
+            padding-top: 30px;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .features h3 {
+            color: #2d3748;
+            font-size: 18px;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .features ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .features ul li {
+            color: #4a5568;
+            font-size: 14px;
+            padding: 8px 0;
+            padding-left: 24px;
+            position: relative;
+        }
+
+        .features ul li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #48bb78;
+            font-weight: bold;
+        }
+
+        .error-message {
+            color: #e53e3e;
+            font-size: 13px;
+            margin-top: 6px;
+            display: none;
+        }
+
+        .success-message {
+            background-color: #c6f6d5;
+            border: 1px solid #48bb78;
+            color: #22543d;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        @media (max-width: 640px) {
+            .container {
+                padding: 30px 20px;
+            }
+
+            .header h1 {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Corporate Law Intelligence Briefing</h1>
+            <p>Get daily insights on legal developments, regulatory actions, and business opportunities tailored to your practice areas</p>
+        </div>
+
+        <div class="success-message" id="successMessage">
+            Thank you for signing up! You'll start receiving tailored legal intelligence briefings soon.
+        </div>
+
+        <form id="signupForm" action="#" method="POST">
+            <div class="form-group">
+                <label for="practiceArea">
+                    Practice Area
+                    <span class="required">*</span>
+                </label>
+                <select id="practiceArea" name="practiceArea" required>
+                    <option value="">Select your practice area...</option>
+                    <optgroup label="Corporate & Commercial">
+                        <option value="Mergers & Acquisitions">Mergers & Acquisitions</option>
+                        <option value="Corporate Governance">Corporate Governance</option>
+                        <option value="Securities & Capital Markets">Securities & Capital Markets</option>
+                        <option value="Private Equity & Venture Capital">Private Equity & Venture Capital</option>
+                        <option value="Joint Ventures & Strategic Alliances">Joint Ventures & Strategic Alliances</option>
+                        <option value="Corporate Restructuring">Corporate Restructuring</option>
+                    </optgroup>
+                    <optgroup label="Litigation & Dispute Resolution">
+                        <option value="Commercial Litigation">Commercial Litigation</option>
+                        <option value="Class Actions">Class Actions</option>
+                        <option value="Arbitration & Mediation">Arbitration & Mediation</option>
+                        <option value="White Collar Crime & Investigations">White Collar Crime & Investigations</option>
+                        <option value="Product Liability">Product Liability</option>
+                        <option value="Construction Disputes">Construction Disputes</option>
+                    </optgroup>
+                    <optgroup label="Insolvency & Restructuring">
+                        <option value="Insolvency & Bankruptcy">Insolvency & Bankruptcy</option>
+                        <option value="Debt Restructuring">Debt Restructuring</option>
+                        <option value="Liquidation & Receivership">Liquidation & Receivership</option>
+                        <option value="Director & Officer Liability">Director & Officer Liability</option>
+                        <option value="Distressed M&A">Distressed M&A</option>
+                    </optgroup>
+                    <optgroup label="Regulatory & Compliance">
+                        <option value="Securities Regulation">Securities Regulation</option>
+                        <option value="ASIC Enforcement & Defense">ASIC Enforcement & Defense</option>
+                        <option value="ACCC Compliance">ACCC Compliance</option>
+                        <option value="Competition & Antitrust">Competition & Antitrust</option>
+                        <option value="Anti-Money Laundering (AML)">Anti-Money Laundering (AML)</option>
+                        <option value="Financial Services Regulation">Financial Services Regulation</option>
+                        <option value="Environmental Compliance">Environmental Compliance</option>
+                        <option value="Data Privacy & Cybersecurity">Data Privacy & Cybersecurity</option>
+                    </optgroup>
+                    <optgroup label="Banking & Finance">
+                        <option value="Banking & Finance">Banking & Finance</option>
+                        <option value="Project Finance">Project Finance</option>
+                        <option value="Asset Finance">Asset Finance</option>
+                        <option value="Structured Finance">Structured Finance</option>
+                        <option value="Trade Finance">Trade Finance</option>
+                        <option value="Financial Services Litigation">Financial Services Litigation</option>
+                    </optgroup>
+                    <optgroup label="Employment & Labor">
+                        <option value="Employment Law">Employment Law</option>
+                        <option value="Workplace Investigations">Workplace Investigations</option>
+                        <option value="Executive Compensation">Executive Compensation</option>
+                        <option value="Industrial Relations">Industrial Relations</option>
+                        <option value="Workplace Health & Safety">Workplace Health & Safety</option>
+                    </optgroup>
+                    <optgroup label="Tax">
+                        <option value="Corporate Tax">Corporate Tax</option>
+                        <option value="Tax Controversy & Litigation">Tax Controversy & Litigation</option>
+                        <option value="Transfer Pricing">Transfer Pricing</option>
+                        <option value="International Tax">International Tax</option>
+                    </optgroup>
+                    <optgroup label="Intellectual Property">
+                        <option value="IP Litigation">IP Litigation</option>
+                        <option value="Patent Prosecution">Patent Prosecution</option>
+                        <option value="Trademark & Brand Protection">Trademark & Brand Protection</option>
+                        <option value="Technology Transfer">Technology Transfer</option>
+                        <option value="Copyright & Media">Copyright & Media</option>
+                    </optgroup>
+                    <optgroup label="Real Estate & Construction">
+                        <option value="Real Estate Transactions">Real Estate Transactions</option>
+                        <option value="Real Estate Finance">Real Estate Finance</option>
+                        <option value="Construction Law">Construction Law</option>
+                        <option value="Planning & Zoning">Planning & Zoning</option>
+                        <option value="Property Disputes">Property Disputes</option>
+                    </optgroup>
+                    <optgroup label="Energy & Resources">
+                        <option value="Mining & Resources">Mining & Resources</option>
+                        <option value="Energy & Utilities">Energy & Utilities</option>
+                        <option value="Oil & Gas">Oil & Gas</option>
+                        <option value="Renewable Energy">Renewable Energy</option>
+                        <option value="Environmental Law">Environmental Law</option>
+                    </optgroup>
+                    <optgroup label="Technology & Innovation">
+                        <option value="Technology Transactions">Technology Transactions</option>
+                        <option value="Fintech & Cryptocurrency">Fintech & Cryptocurrency</option>
+                        <option value="Software Licensing">Software Licensing</option>
+                        <option value="E-Commerce">E-Commerce</option>
+                        <option value="Telecommunications">Telecommunications</option>
+                    </optgroup>
+                    <optgroup label="Healthcare & Life Sciences">
+                        <option value="Healthcare Regulation">Healthcare Regulation</option>
+                        <option value="Pharmaceutical & Biotech">Pharmaceutical & Biotech</option>
+                        <option value="Medical Devices">Medical Devices</option>
+                        <option value="Healthcare Litigation">Healthcare Litigation</option>
+                    </optgroup>
+                </select>
+                <div class="error-message" id="practiceAreaError">Please select a practice area</div>
+            </div>
+
+            <div class="form-group">
+                <label for="jurisdiction">
+                    Jurisdiction
+                    <span class="required">*</span>
+                </label>
+                <select id="jurisdiction" name="jurisdiction" required>
+                    <option value="">Select jurisdiction...</option>
+                    <option value="Australia">Australia</option>
+                    <option value="United Kingdom">United Kingdom</option>
+                    <option value="United States">United States</option>
+                </select>
+                <div class="error-message" id="jurisdictionError">Please select a jurisdiction</div>
+            </div>
+
+            <div class="form-group">
+                <label for="companies">
+                    Focus Companies
+                </label>
+                <textarea
+                    id="companies"
+                    name="companies"
+                    placeholder="e.g., Macquarie Bank, Commonwealth Bank, BHP, Rio Tinto"
+                    rows="3"
+                ></textarea>
+                <small>Enter company names separated by commas (optional)</small>
+            </div>
+
+            <div class="form-group">
+                <label for="email">
+                    Email Address
+                    <span class="required">*</span>
+                </label>
+                <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    placeholder="your.email@lawfirm.com"
+                    required
+                />
+                <div class="error-message" id="emailError">Please enter a valid email address</div>
+            </div>
+
+            <button type="submit" class="submit-btn">Get Daily Briefings</button>
+        </form>
+
+        <div class="features">
+            <h3>What You'll Receive:</h3>
+            <ul>
+                <li>Daily briefings on legal developments in your practice areas</li>
+                <li>ASIC, ACCC, and court activity monitoring</li>
+                <li>Company-specific intelligence on your focus list</li>
+                <li>High-priority opportunities including class actions and regulatory matters</li>
+                <li>Emerging trends and market intelligence</li>
+                <li>Actionable insights for business development</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('signupForm');
+        const successMessage = document.getElementById('successMessage');
+
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            // Clear previous error messages
+            document.querySelectorAll('.error-message').forEach(el => {
+                el.style.display = 'none';
+            });
+
+            // Validate form
+            let isValid = true;
+
+            const practiceArea = document.getElementById('practiceArea');
+            if (!practiceArea.value) {
+                document.getElementById('practiceAreaError').style.display = 'block';
+                isValid = false;
+            }
+
+            const jurisdiction = document.getElementById('jurisdiction');
+            if (!jurisdiction.value) {
+                document.getElementById('jurisdictionError').style.display = 'block';
+                isValid = false;
+            }
+
+            const email = document.getElementById('email');
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!email.value || !emailRegex.test(email.value)) {
+                document.getElementById('emailError').style.display = 'block';
+                isValid = false;
+            }
+
+            if (!isValid) {
+                return;
+            }
+
+            // Collect form data
+            const formData = {
+                practiceArea: practiceArea.value,
+                jurisdiction: jurisdiction.value,
+                companies: document.getElementById('companies').value,
+                email: email.value
+            };
+
+            // Show loading state
+            const submitBtn = form.querySelector('.submit-btn');
+            const originalBtnText = submitBtn.textContent;
+            submitBtn.textContent = 'Subscribing...';
+            submitBtn.disabled = true;
+
+            // Send data to backend
+            fetch('/api/subscribe', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => Promise.reject(err));
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Show success message
+                successMessage.style.display = 'block';
+                form.reset();
+
+                // Scroll to success message
+                successMessage.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+                // Reset button
+                submitBtn.textContent = originalBtnText;
+                submitBtn.disabled = false;
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert(error.error || 'Error submitting form. Please try again.');
+
+                // Reset button
+                submitBtn.textContent = originalBtnText;
+                submitBtn.disabled = false;
+            });
+        });
+
+        // Hide error messages when user starts typing/selecting
+        document.querySelectorAll('input, select, textarea').forEach(element => {
+            element.addEventListener('input', function() {
+                const errorId = this.id + 'Error';
+                const errorElement = document.getElementById(errorId);
+                if (errorElement) {
+                    errorElement.style.display = 'none';
+                }
+            });
+        });
+    </script>
+</body>
+</html>

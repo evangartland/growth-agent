@@ -92,6 +92,46 @@ EXCLUDED_COMPANIES = [
     # Example: "Client Company Pty Ltd ACN 987654321",
 ]
 
+# ASIC sources to check daily
+ASIC_SOURCES = {
+    "published_notices": "https://publishednotices.asic.gov.au",
+    "insolvency_statistics": "https://asic.gov.au/regulatory-resources/find-a-document/statistics/insolvency-statistics/",
+    "media_releases": "https://asic.gov.au/about-asic/news-centre/"
+}
+
+# Court registers to monitor
+COURT_SOURCES = {
+    "federal_court": "https://www.fedcourt.gov.au",
+    "supreme_court_nsw": "https://www.supremecourt.nsw.gov.au",
+    "supreme_court_vic": "https://www.supremecourt.vic.gov.au",
+    "supreme_court_qld": "https://www.courts.qld.gov.au",
+    "supreme_court_sa": "https://www.courts.sa.gov.au",
+    "supreme_court_wa": "https://www.supremecourt.wa.gov.au",
+    "supreme_court_tas": "https://www.supremecourt.tas.gov.au",
+    "supreme_court_nt": "https://supremecourt.nt.gov.au"
+}
+
+# Critical search terms for court filings
+COURT_SEARCH_TERMS = [
+    'winding up',
+    'statutory demand',
+    'creditor\'s petition',
+    'oppression proceedings',
+    'receivership application',
+    'administrator appointed',
+    'liquidator appointed'
+]
+
+# ASIC monitoring priorities
+ASIC_MONITORING = [
+    'director resignation',
+    'registered office change',
+    'receiver appointed',
+    'administrator appointed',
+    'liquidator appointed',
+    'share structure change'
+]
+
 
 def fetch_asic_media_releases():
     """Fetch recent ASIC media releases"""
@@ -192,6 +232,178 @@ def fetch_austlii_recent_cases():
     except Exception as e:
         print(f"Error fetching AustLII data: {e}")
         return {"cases": [], "count": 0, "error": str(e)}
+
+
+def fetch_asic_published_notices():
+    """Fetch recent ASIC published notices - includes director resignations, appointments, etc."""
+    try:
+        url = ASIC_SOURCES["published_notices"]
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+
+        soup = BeautifulSoup(response.content, 'html.parser')
+        notices = []
+
+        # Look for notice items - ASIC published notices site structure
+        notice_items = soup.find_all(['article', 'div', 'tr'], limit=30)
+
+        for item in notice_items[:30]:
+            # Try to extract company name and notice type
+            text = item.get_text(strip=True)
+
+            # Look for key indicators
+            if any(keyword in text.lower() for keyword in ['director', 'administrator', 'liquidator', 'receiver', 'company']):
+                # Try to find links
+                link_elem = item.find('a', href=True)
+                link = link_elem['href'] if link_elem else ''
+                if link and not link.startswith('http'):
+                    link = url + link
+
+                notices.append({
+                    'title': text[:200],  # Limit length
+                    'link': link,
+                    'source': 'ASIC Published Notices'
+                })
+
+        return {"notices": notices, "count": len(notices)}
+
+    except Exception as e:
+        print(f"Error fetching ASIC published notices: {e}")
+        return {"notices": [], "count": 0, "error": str(e)}
+
+
+def search_federal_court_filings():
+    """Search Federal Court for recent filings with critical keywords"""
+    try:
+        results = []
+
+        # Search using Google News for Federal Court filings (more reliable than scraping)
+        for term in COURT_SEARCH_TERMS[:5]:  # Limit to avoid rate limiting
+            query = f'site:fedcourt.gov.au "{term}" australia'
+            news_results = fetch_google_news_rss(query, max_results=3, max_age_days=7)
+
+            for article in news_results.get('articles', []):
+                results.append({
+                    'title': article.get('title', ''),
+                    'link': article.get('link', ''),
+                    'search_term': term,
+                    'court': 'Federal Court',
+                    'pub_date': article.get('pub_date', ''),
+                    'source': 'Federal Court Filings'
+                })
+
+            time.sleep(0.3)  # Rate limiting
+
+        return {"filings": results, "count": len(results)}
+
+    except Exception as e:
+        print(f"Error searching Federal Court: {e}")
+        return {"filings": [], "count": 0, "error": str(e)}
+
+
+def search_supreme_courts():
+    """Search Supreme Courts for winding up and insolvency matters"""
+    try:
+        results = []
+
+        # Focus on NSW and VIC (highest volume commercial matters)
+        priority_courts = [
+            ("supreme_court_nsw", "NSW Supreme Court"),
+            ("supreme_court_vic", "VIC Supreme Court")
+        ]
+
+        for court_key, court_name in priority_courts:
+            court_url = COURT_SOURCES.get(court_key, '')
+
+            # Search for winding up and insolvency matters
+            for term in ['winding up', 'administrator appointed', 'receivership'][:2]:  # Limit searches
+                query = f'site:{court_url.replace("https://", "").replace("http://", "")} "{term}"'
+                news_results = fetch_google_news_rss(query, max_results=2, max_age_days=7)
+
+                for article in news_results.get('articles', []):
+                    results.append({
+                        'title': article.get('title', ''),
+                        'link': article.get('link', ''),
+                        'search_term': term,
+                        'court': court_name,
+                        'pub_date': article.get('pub_date', ''),
+                        'source': 'Supreme Court Filings'
+                    })
+
+                time.sleep(0.3)
+
+        return {"filings": results, "count": len(results)}
+
+    except Exception as e:
+        print(f"Error searching Supreme Courts: {e}")
+        return {"filings": [], "count": 0, "error": str(e)}
+
+
+def search_watchlist_in_courts():
+    """Search for watchlist companies in court filings"""
+    try:
+        results = []
+
+        # Search for top 10 priority watchlist companies in courts
+        priority_companies = WATCHLIST_COMPANIES[:10]
+
+        for company in priority_companies:
+            # Search across court sites
+            query = f'"{company}" (court OR federal court OR supreme court) australia'
+            news_results = fetch_google_news_rss(query, max_results=2, max_age_days=7)
+
+            for article in news_results.get('articles', []):
+                results.append({
+                    'title': article.get('title', ''),
+                    'link': article.get('link', ''),
+                    'company': company,
+                    'pub_date': article.get('pub_date', ''),
+                    'source': 'Court Filings - Watchlist'
+                })
+
+            time.sleep(0.3)
+
+        return {"filings": results, "count": len(results)}
+
+    except Exception as e:
+        print(f"Error searching watchlist in courts: {e}")
+        return {"filings": [], "count": 0, "error": str(e)}
+
+
+def search_ppsr_indicators():
+    """Search for PPSR-related news indicating refinancing or receiverships"""
+    try:
+        results = []
+
+        # Search for PPSR activity that indicates financial distress
+        queries = [
+            'PPSR security interest registered australia',
+            'receiver appointed PPSR australia',
+            'secured creditor appointment australia'
+        ]
+
+        for query in queries:
+            news_results = fetch_google_news_rss(query, max_results=3, max_age_days=7)
+
+            for article in news_results.get('articles', []):
+                results.append({
+                    'title': article.get('title', ''),
+                    'link': article.get('link', ''),
+                    'pub_date': article.get('pub_date', ''),
+                    'source': 'PPSR Indicators'
+                })
+
+            time.sleep(0.3)
+
+        return {"articles": results, "count": len(results)}
+
+    except Exception as e:
+        print(f"Error searching PPSR indicators: {e}")
+        return {"articles": [], "count": 0, "error": str(e)}
 
 
 def fetch_google_news_rss(query, max_results=10, max_age_days=7, time_range='7d'):
@@ -545,6 +757,22 @@ def generate_briefing():
     print("- Searching for Australian legal news...")
     news_data = fetch_australian_legal_news()
 
+    # NEW ENHANCED SOURCES - More up-to-date intelligence
+    print("- Fetching ASIC published notices (director changes, appointments)...")
+    asic_notices = fetch_asic_published_notices()
+
+    print("- Searching Federal Court filings (winding up, statutory demands)...")
+    federal_court = search_federal_court_filings()
+
+    print("- Searching Supreme Court filings (NSW/VIC insolvency matters)...")
+    supreme_court = search_supreme_courts()
+
+    print("- Searching for watchlist companies in court filings...")
+    watchlist_courts = search_watchlist_in_courts()
+
+    print("- Searching PPSR indicators (refinancing, receiver appointments)...")
+    ppsr_data = search_ppsr_indicators()
+
     # Prepare data summary for Claude
     watchlist_str = "\n".join([f"- {company}" for company in WATCHLIST_COMPANIES if company])
     industries_str = ", ".join(PRIORITY_INDUSTRIES)
@@ -553,10 +781,18 @@ def generate_briefing():
     # Debug: Print data collection results
     print(f"\nData Collection Summary:")
     print(f"  ASIC releases: {asic_data.get('count', 0)}")
+    print(f"  ASIC published notices: {asic_notices.get('count', 0)}")
     print(f"  ACCC releases: {accc_data.get('count', 0)}")
     print(f"  AustLII cases: {austlii_data.get('count', 0)}")
+    print(f"  Federal Court filings: {federal_court.get('count', 0)}")
+    print(f"  Supreme Court filings: {supreme_court.get('count', 0)}")
+    print(f"  Watchlist in courts: {watchlist_courts.get('count', 0)}")
+    print(f"  PPSR indicators: {ppsr_data.get('count', 0)}")
     print(f"  News articles: {news_data.get('count', 0)}")
-    print(f"  Total data points: {asic_data.get('count', 0) + accc_data.get('count', 0) + austlii_data.get('count', 0) + news_data.get('count', 0)}\n")
+    total_points = (asic_data.get('count', 0) + asic_notices.get('count', 0) + accc_data.get('count', 0) +
+                   austlii_data.get('count', 0) + federal_court.get('count', 0) + supreme_court.get('count', 0) +
+                   watchlist_courts.get('count', 0) + ppsr_data.get('count', 0) + news_data.get('count', 0))
+    print(f"  Total data points: {total_points}\n")
 
     # Format ASIC releases
     asic_releases_str = "\n".join([
@@ -595,22 +831,76 @@ def generate_briefing():
         for a in articles_7d[:30]
     ]) or "No articles from 2-7 days ago"
 
+    # Format NEW ENHANCED SOURCES
+    # ASIC Published Notices
+    asic_notices_str = "\n".join([
+        f"- {n.get('title', 'No title')}\n  Link: {n.get('link', 'No link')}"
+        for n in asic_notices.get('notices', [])[:15]
+    ]) or "No recent ASIC published notices found"
+
+    # Federal Court Filings
+    federal_court_str = "\n".join([
+        f"- [{f.get('pub_date', 'Recent')}] {f.get('title', 'No title')} (Search: {f.get('search_term', '')})\n  Link: {f.get('link', 'No link')}"
+        for f in federal_court.get('filings', [])[:15]
+    ]) or "No recent Federal Court filings found"
+
+    # Supreme Court Filings
+    supreme_court_str = "\n".join([
+        f"- [{s.get('pub_date', 'Recent')}] {s.get('title', 'No title')} ({s.get('court', '')})\n  Link: {s.get('link', 'No link')}"
+        for s in supreme_court.get('filings', [])[:15]
+    ]) or "No recent Supreme Court filings found"
+
+    # Watchlist in Courts
+    watchlist_courts_str = "\n".join([
+        f"- [{w.get('pub_date', 'Recent')}] {w.get('title', 'No title')} (Company: {w.get('company', '')})\n  Link: {w.get('link', 'No link')}"
+        for w in watchlist_courts.get('filings', [])[:15]
+    ]) or "No watchlist companies found in court filings"
+
+    # PPSR Indicators
+    ppsr_str = "\n".join([
+        f"- [{p.get('pub_date', 'Recent')}] {p.get('title', 'No title')}\n  Link: {p.get('link', 'No link')}"
+        for p in ppsr_data.get('articles', [])[:10]
+    ]) or "No recent PPSR indicators found"
+
     data_summary = f"""
 DATA COLLECTED FROM AUSTRALIAN SOURCES:
+
+=== REGULATORY & OFFICIAL SOURCES ===
 
 ASIC Media Releases ({asic_data.get('count', 0)} items):
 {asic_releases_str}
 
+ASIC Published Notices ({asic_notices.get('count', 0)} notices) - DIRECTOR CHANGES, APPOINTMENTS:
+{asic_notices_str}
+
 ACCC Announcements ({accc_data.get('count', 0)} items):
 {accc_releases_str}
+
+=== COURT FILINGS & LITIGATION ===
+
+Federal Court Filings ({federal_court.get('count', 0)} filings) - WINDING UP, STATUTORY DEMANDS:
+{federal_court_str}
+
+Supreme Court Filings - NSW/VIC ({supreme_court.get('count', 0)} filings) - INSOLVENCY MATTERS:
+{supreme_court_str}
+
+Watchlist Companies in Court Filings ({watchlist_courts.get('count', 0)} mentions):
+{watchlist_courts_str}
 
 Recent Federal Court Cases from AustLII ({austlii_data.get('count', 0)} cases):
 {austlii_cases_str}
 
+=== SECURITY INTERESTS & FINANCIAL DISTRESS INDICATORS ===
+
+PPSR Indicators ({ppsr_data.get('count', 0)} items) - REFINANCING, RECEIVER APPOINTMENTS:
+{ppsr_str}
+
+=== NEWS & MEDIA ===
+
 Australian Legal News ({news_data.get('count', 0)} articles):
 {news_articles_str}
 
-MONITORING PRIORITIES:
+=== MONITORING PRIORITIES ===
 Watchlist Companies ({len([c for c in WATCHLIST_COMPANIES if c.strip()])} companies):
 {watchlist_str}
 

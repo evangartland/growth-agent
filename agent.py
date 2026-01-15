@@ -626,7 +626,7 @@ High-Value Keywords: {keywords_str}
         max_tokens=8000,
         messages=[{
             "role": "user",
-            "content": f"""You are a legal intelligence analyst for Hamilton Locke, an Australian commercial law firm specializing in disputes, insolvency, and regulatory matters.
+            "content": f"""You are a legal intelligence analyst for an Australian commercial law firm specializing in disputes, insolvency, and regulatory matters.
 
 Analyze this data from {datetime.now().strftime('%B %d, %Y')} (Australian sources):
 
@@ -670,11 +670,10 @@ For EACH opportunity, include:
 **Overview**: Brief description of the matter
 
 **Estimated Legal Fees**:
-- Fee Range: $XXX,XXX - $XXX,XXX (based on estimated hours and team composition)
-- Team Composition: e.g., 1 Partner, 1 Senior Associate, 1 Associate
+- Fee Range: $XXX,XXX - $XXX,XXX (based on estimated hours and complexity)
 - Estimated Duration: e.g., 6-12 months
 
-**So What? (Hamilton Locke Analysis)**:
+**So What? (Firm Analysis)**:
 - Estimated Matter Value: $XXM - $XXM
 - Practice Group: [Disputes/Insolvency/Regulatory/Corporate]
 - Win Probability: [High/Medium/Low] - based on:

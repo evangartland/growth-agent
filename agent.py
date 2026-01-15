@@ -582,16 +582,16 @@ def generate_briefing():
 
     print(f"  Article breakdown: 24h={len(articles_24h)}, 7d={len(articles_7d)}")
 
-    # Show publication dates to verify recency
+    # Show publication dates to verify recency - INCLUDE LINKS for reference section
     news_articles_str = "LAST 24 HOURS (IMMEDIATE OPPORTUNITIES):\n"
     news_articles_str += "\n".join([
-        f"- [{a.get('pub_date', 'Unknown date')}] {a.get('title', 'No title')}"
+        f"- [{a.get('pub_date', 'Unknown date')}] {a.get('title', 'No title')}\n  Link: {a.get('link', 'No link')}"
         for a in articles_24h[:30]
     ]) or "No articles in last 24 hours\n"
 
     news_articles_str += "\n\nLAST 2-7 DAYS (RECENT DEVELOPMENTS):\n"
     news_articles_str += "\n".join([
-        f"- [{a.get('pub_date', 'Unknown date')}] {a.get('title', 'No title')}"
+        f"- [{a.get('pub_date', 'Unknown date')}] {a.get('title', 'No title')}\n  Link: {a.get('link', 'No link')}"
         for a in articles_7d[:30]
     ]) or "No articles from 2-7 days ago"
 
@@ -623,10 +623,10 @@ High-Value Keywords: {keywords_str}
 
     message = client.messages.create(
         model="claude-sonnet-4-20250514",
-        max_tokens=4000,
+        max_tokens=8000,
         messages=[{
             "role": "user",
-            "content": f"""You are a legal intelligence analyst for an Australian commercial law firm specializing in disputes, insolvency, and regulatory matters.
+            "content": f"""You are a legal intelligence analyst for Hamilton Locke, an Australian commercial law firm specializing in disputes, insolvency, and regulatory matters.
 
 Analyze this data from {datetime.now().strftime('%B %d, %Y')} (Australian sources):
 
@@ -641,7 +641,16 @@ CRITICAL INSTRUCTIONS - LATEST NEWS ONLY:
 - Pay special attention to ANY mentions of our watchlist companies
 - Cross-reference news items with our priority industries and keywords
 
-Generate a concise morning briefing with:
+LEGAL FEE ESTIMATION GUIDELINES:
+Use these mid-market Australian law firm rates for fee estimates:
+- Partners: AUD $1,000/hour
+- Special Counsel: AUD $650/hour
+- Senior Associate: AUD $550/hour
+- Associate: AUD $400/hour
+
+Estimate the matter value based on complexity, duration, and team composition.
+
+Generate a comprehensive morning briefing with:
 
 ## Executive Summary
 Provide 2-3 sentences highlighting the most significant developments from the last 7 days.
@@ -655,12 +664,57 @@ List specific matters worth pursuing from the data:
  - Director liability issues
  - Major commercial disputes
 
+For EACH opportunity, include:
+
+### [Opportunity Title]
+**Overview**: Brief description of the matter
+
+**Estimated Legal Fees**:
+- Fee Range: $XXX,XXX - $XXX,XXX (based on estimated hours and team composition)
+- Team Composition: e.g., 1 Partner, 1 Senior Associate, 1 Associate
+- Estimated Duration: e.g., 6-12 months
+
+**So What? (Hamilton Locke Analysis)**:
+- Estimated Matter Value: $XXM - $XXM
+- Practice Group: [Disputes/Insolvency/Regulatory/Corporate]
+- Win Probability: [High/Medium/Low] - based on:
+  * Known legal relationships of the business
+  * Competitive positioning
+  * Our firm's expertise match
+  * Geographic/industry connections
+
+**Competitive Intelligence**:
+- Current/Past Legal Advisors: [List any known Australian law firms that have worked with this company]
+- Law Firm Relationships: [Any publicly known legal relationships]
+- Recent Law Firm Changes: [If they've changed firms or fired their law firm]
+
+**Human Context & Timing Factors**:
+- Management Changes: [Is current management new? Recent CEO/CFO appointments?]
+- Law Firm Status: [Did they recently fire/change their law firm? Window of opportunity?]
+- Financial Health: [Are they in financial distress? Can they pay? Cash position?]
+- Litigation Budget: [Any publicly available information about their legal budget or spend]
+- Other Relevant Context: [Any other strategic information]
+
+**Priority Ranking**:
+- Matter Value Score: [1-10]
+- Win Probability Score: [1-10]
+- Strategic Importance: [1-10] (alignment with firm strategy, precedent value, profile)
+- Timing Urgency: [1-10] (how time-sensitive is this opportunity?)
+- **OVERALL PRIORITY**: [High/Medium/Low] (weighted composite score)
+
+**Source Links**:
+- [List all relevant article links and sources for this opportunity]
+
+---
+
 Prioritize opportunities from "LAST 24 HOURS" section. All news is current and actionable.
 
 ## Watchlist Company Activity
 Specifically identify ANY mentions of our {len(WATCHLIST_COMPANIES)} watchlist companies.
 Note: Even tangential mentions (industry news affecting these companies) are valuable.
 If none found, state this clearly and suggest targeted monitoring.
+
+For each watchlist company mentioned, include the same detailed analysis as above (fees, So What, competitive intel, human context, priority ranking).
 
 ## Priority Industry Developments
 Analyze news related to our priority industries: {industries_str}
@@ -670,14 +724,39 @@ Identify potential opportunities or risks in these sectors.
 Identify patterns across Australian industries, regulators (ASIC, ACCC, etc.), or claim types.
 Consider broader market conditions affecting our practice areas.
 
-## Action Items
-Provide specific, actionable next steps:
- - Companies to research further
- - Potential clients to contact
- - Regulatory developments to monitor
- - Market intelligence to gather
+## Prioritized Action Items
+Rank all opportunities by composite priority score. List top 10 actions:
+1. [Highest priority opportunity - with brief rationale]
+2. [Second highest priority - with brief rationale]
+...
 
-Be direct and practical - this briefing drives business development decisions."""
+Include:
+- Companies to research further
+- Potential clients to contact immediately
+- Regulatory developments to monitor
+- Market intelligence to gather
+- Documents to source (creditor lists, administration reports, court filings)
+
+## Company Administration Intelligence
+For any companies in administration, receivership, or liquidation, attempt to identify:
+- Administrator/Receiver/Liquidator names
+- Creditor lists (from public documents if available)
+- Debt amounts
+- Related entities
+- Directors' names
+- Potential claimants
+
+Suggest specific documents to source (e.g., ASIC Form 505, administrator's reports).
+
+## References
+List ALL source links used in this briefing:
+- [Article Title] - [Full URL]
+- [Article Title] - [Full URL]
+...
+
+Group by source type (ASIC, ACCC, AustLII, News).
+
+Be direct and practical - this briefing drives business development decisions and pitch preparation."""
         }]
     )
 

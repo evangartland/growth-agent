@@ -16,8 +16,10 @@ on:
 
 jobs:
   generate-briefing:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04  # Use specific version instead of latest
     timeout-minutes: 30
+    # Retry strategy for runner acquisition issues
+    continue-on-error: false
 
     steps:
     - name: Checkout code

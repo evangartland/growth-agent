@@ -171,7 +171,7 @@ def fetch_asic_media_releases():
 def fetch_accc_news():
     """Fetch recent ACCC media releases and enforcement actions"""
     try:
-        url = "https://www.accc.gov.au/media-and-publications/media-releases"
+        url = "https://www.accc.gov.au/news-centre"
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
@@ -204,8 +204,8 @@ def fetch_accc_news():
 def fetch_austlii_recent_cases():
     """Fetch recent cases from AustLII (Australasian Legal Information Institute)"""
     try:
-        # AustLII Federal Court recent decisions
-        url = "http://www.austlii.edu.au/cgi-bin/viewdb/au/cases/cth/FCA/"
+        # AustLII Federal Court recent decisions (use HTTPS)
+        url = "https://www.austlii.edu.au/au/cases/cth/FCA/"
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
@@ -432,8 +432,21 @@ def fetch_google_news_rss(query, max_results=10, max_age_days=7, time_range='7d'
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
 
-        response = requests.get(rss_url, headers=headers, timeout=15)
-        response.raise_for_status()
+        # Retry logic for transient SSL/connection errors
+        max_retries = 3
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                response = requests.get(rss_url, headers=headers, timeout=15)
+                response.raise_for_status()
+                break
+            except (requests.exceptions.SSLError, requests.exceptions.ConnectionError) as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    time.sleep(1 * (attempt + 1))  # Exponential backoff: 1s, 2s
+                    continue
+                else:
+                    raise last_error
 
         # Parse XML RSS feed
         soup = BeautifulSoup(response.content, 'xml')

@@ -70,6 +70,7 @@ jobs:
         path: |
           briefing*.txt
           seen_articles.json
+        if-no-files-found: warn
         retention-days: 90
 
     - name: Display completion status

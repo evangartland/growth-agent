@@ -1,0 +1,504 @@
+<!--
+  THREE PEAKS CHALLENGE LEADERBOARD
+  Paste this into a Shopify page: Online Store → Pages → Add Page → click <> (Show HTML)
+
+  BEFORE PASTING: Replace the two values below with your Supabase project details
+  (found in Supabase → Settings → API)
+-->
+
+<div id="three-peaks-app">
+  <!-- TAB NAVIGATION -->
+  <div class="tp-tabs">
+    <button class="tp-tab tp-tab-active" onclick="tpShowTab('leaderboard')">Leaderboard</button>
+    <button class="tp-tab" onclick="tpShowTab('submit')">Submit Your Time</button>
+  </div>
+
+  <!-- LEADERBOARD TAB -->
+  <div id="tp-leaderboard" class="tp-panel">
+    <div class="tp-hero">
+      <h2 class="tp-title">Three Peaks Challenge</h2>
+      <p class="tp-subtitle">Ben Nevis &bull; Scafell Pike &bull; Snowdon</p>
+    </div>
+    <div id="tp-table-wrap">
+      <p class="tp-loading">Loading leaderboard...</p>
+    </div>
+  </div>
+
+  <!-- SUBMIT TAB -->
+  <div id="tp-submit" class="tp-panel" style="display:none;">
+    <h2 class="tp-title">Submit Your Time</h2>
+    <p class="tp-subtitle">Completed the challenge? Submit your details below. Your entry will be reviewed before appearing on the leaderboard.</p>
+
+    <div id="tp-success" style="display:none;" class="tp-alert tp-alert-success">
+      Your submission has been received and is pending approval. You'll be notified once it's reviewed!
+    </div>
+
+    <form id="tp-form" class="tp-form">
+      <div class="tp-field">
+        <label>Full Name</label>
+        <input type="text" id="tp-name" required placeholder="e.g. Alex Johnson">
+      </div>
+      <div class="tp-field">
+        <label>Email Address</label>
+        <input type="email" id="tp-email" required placeholder="you@example.com">
+      </div>
+      <div class="tp-field">
+        <label>Completion Time</label>
+        <div class="tp-time-row">
+          <div class="tp-time-col">
+            <input type="number" id="tp-hours" min="0" max="99" required placeholder="HH">
+            <span class="tp-time-label">hrs</span>
+          </div>
+          <span class="tp-time-sep">:</span>
+          <div class="tp-time-col">
+            <input type="number" id="tp-minutes" min="0" max="59" required placeholder="MM">
+            <span class="tp-time-label">min</span>
+          </div>
+          <span class="tp-time-sep">:</span>
+          <div class="tp-time-col">
+            <input type="number" id="tp-seconds" min="0" max="59" required placeholder="SS">
+            <span class="tp-time-label">sec</span>
+          </div>
+        </div>
+      </div>
+      <div class="tp-field">
+        <label>Photo (optional, max 10MB)</label>
+        <div class="tp-file-box">
+          <input type="file" id="tp-photo" accept="image/jpeg,image/png,image/webp">
+          <div class="tp-file-text">
+            <span style="font-size:1.5rem;display:block">&#128247;</span>
+            <span id="tp-file-name">Click to upload a photo</span>
+          </div>
+        </div>
+      </div>
+      <div id="tp-form-error" class="tp-alert tp-alert-error" style="display:none;"></div>
+      <button type="submit" id="tp-submit-btn" class="tp-btn tp-btn-primary tp-btn-block">Submit Entry</button>
+    </form>
+  </div>
+</div>
+
+<style>
+  /* ============================================
+     Three Peaks – Scoped Styles
+     All prefixed with tp- to avoid Shopify conflicts
+     ============================================ */
+  #three-peaks-app {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    max-width: 720px;
+    margin: 0 auto;
+    color: #2c3e50;
+    line-height: 1.6;
+  }
+
+  #three-peaks-app *, #three-peaks-app *::before, #three-peaks-app *::after {
+    box-sizing: border-box;
+  }
+
+  .tp-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 2px solid #dce1e6;
+    padding-bottom: 0;
+  }
+
+  .tp-tab {
+    padding: 0.7rem 1.5rem;
+    border: none;
+    background: none;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #7f8c8d;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s;
+  }
+
+  .tp-tab:hover { color: #2c3e50; }
+  .tp-tab-active {
+    color: #1a5276;
+    border-bottom-color: #1a5276;
+  }
+
+  .tp-hero {
+    text-align: center;
+    padding: 1.5rem 0 1rem;
+  }
+
+  .tp-title {
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: #1a5276;
+    margin: 0 0 0.2rem;
+  }
+
+  .tp-subtitle {
+    color: #7f8c8d;
+    font-size: 0.95rem;
+    margin: 0 0 1rem;
+  }
+
+  /* Leaderboard Table */
+  .tp-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  }
+
+  .tp-table th {
+    background: #1a5276;
+    color: #fff;
+    padding: 0.8rem 1rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    text-align: left;
+  }
+
+  .tp-table td {
+    padding: 0.7rem 1rem;
+    border-bottom: 1px solid #eef1f4;
+    vertical-align: middle;
+  }
+
+  .tp-table tbody tr:last-child td { border-bottom: none; }
+  .tp-table tbody tr:hover { background: #f7f9fb; }
+
+  .tp-rank {
+    width: 50px;
+    text-align: center;
+    font-weight: 700;
+    color: #7f8c8d;
+  }
+
+  .tp-medal {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    font-weight: 800;
+    font-size: 0.8rem;
+    color: #fff;
+  }
+
+  .tp-gold { background: linear-gradient(135deg, #f39c12, #f1c40f); box-shadow: 0 2px 8px rgba(243,156,18,0.35); }
+  .tp-silver { background: linear-gradient(135deg, #95a5a6, #bdc3c7); box-shadow: 0 2px 8px rgba(149,165,166,0.35); }
+  .tp-bronze { background: linear-gradient(135deg, #af601a, #dc7633); box-shadow: 0 2px 8px rgba(175,96,26,0.35); }
+
+  .tp-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #eef1f4;
+    vertical-align: middle;
+  }
+
+  .tp-avatar-ph {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: #2e86c1;
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.9rem;
+  }
+
+  .tp-time {
+    font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1a5276;
+  }
+
+  .tp-col-photo { width: 50px; }
+  .tp-col-time { width: 120px; }
+
+  .tp-empty {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: #7f8c8d;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  }
+
+  .tp-loading { text-align: center; color: #7f8c8d; padding: 2rem; }
+
+  /* Form */
+  .tp-form {
+    background: #fff;
+    padding: 1.75rem;
+    border-radius: 10px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    margin-top: 1rem;
+  }
+
+  .tp-field { margin-bottom: 1.2rem; }
+  .tp-field label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+    font-size: 0.9rem;
+  }
+
+  .tp-field input[type="text"],
+  .tp-field input[type="email"],
+  .tp-field input[type="number"] {
+    width: 100%;
+    padding: 0.6rem 0.8rem;
+    border: 1.5px solid #dce1e6;
+    border-radius: 8px;
+    font-size: 1rem;
+    color: #2c3e50;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  .tp-field input:focus {
+    outline: none;
+    border-color: #2e86c1;
+    box-shadow: 0 0 0 3px rgba(46,134,193,0.15);
+  }
+
+  .tp-time-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .tp-time-col { flex: 1; text-align: center; }
+  .tp-time-col input { text-align: center; -moz-appearance: textfield; }
+  .tp-time-col input::-webkit-outer-spin-button,
+  .tp-time-col input::-webkit-inner-spin-button { -webkit-appearance: none; }
+  .tp-time-label { display: block; font-size: 0.75rem; color: #7f8c8d; margin-top: 0.15rem; }
+  .tp-time-sep { font-size: 1.3rem; font-weight: 700; color: #7f8c8d; margin-top: -1rem; }
+
+  .tp-file-box {
+    position: relative;
+    border: 2px dashed #dce1e6;
+    border-radius: 8px;
+    padding: 1.2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+
+  .tp-file-box:hover { border-color: #2e86c1; }
+  .tp-file-box input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .tp-file-text { color: #7f8c8d; font-size: 0.9rem; }
+
+  .tp-btn {
+    display: inline-block;
+    padding: 0.7rem 1.6rem;
+    border: none;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+  }
+  .tp-btn:active { transform: scale(0.97); }
+  .tp-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+  .tp-btn-primary { background: #1a5276; color: #fff; }
+  .tp-btn-primary:hover:not(:disabled) { background: #2e86c1; }
+  .tp-btn-block { display: block; width: 100%; }
+
+  .tp-alert {
+    padding: 0.8rem 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    font-size: 0.95rem;
+  }
+  .tp-alert-success { background: #d5f5e3; color: #1e8449; border: 1px solid #a9dfbf; }
+  .tp-alert-error { background: #fadbd8; color: #c0392b; border: 1px solid #f1948a; }
+
+  /* Responsive */
+  @media (max-width: 600px) {
+    .tp-title { font-size: 1.4rem; }
+    .tp-table th, .tp-table td { padding: 0.5rem 0.5rem; }
+    .tp-time { font-size: 0.85rem; }
+    .tp-avatar, .tp-avatar-ph { width: 28px; height: 28px; font-size: 0.75rem; }
+    .tp-medal { width: 24px; height: 24px; font-size: 0.7rem; }
+    .tp-form { padding: 1.25rem; }
+    .tp-tab { padding: 0.5rem 1rem; font-size: 0.85rem; }
+  }
+
+  @media (max-width: 400px) {
+    .tp-col-photo { display: none; }
+  }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+(function() {
+  // =============================================
+  // CONFIGURE THESE TWO VALUES
+  // Find them at: Supabase → Settings → API
+  // =============================================
+  const SUPABASE_URL = 'YOUR_SUPABASE_URL';       // e.g. https://abcdefg.supabase.co
+  const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY'; // The "anon public" key
+  // =============================================
+
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // Tab switching
+  window.tpShowTab = function(tab) {
+    document.getElementById('tp-leaderboard').style.display = tab === 'leaderboard' ? '' : 'none';
+    document.getElementById('tp-submit').style.display = tab === 'submit' ? '' : 'none';
+    document.querySelectorAll('.tp-tab').forEach(function(el, i) {
+      el.classList.toggle('tp-tab-active', (i === 0 && tab === 'leaderboard') || (i === 1 && tab === 'submit'));
+    });
+    if (tab === 'leaderboard') loadLeaderboard();
+  };
+
+  // Load leaderboard
+  async function loadLeaderboard() {
+    var wrap = document.getElementById('tp-table-wrap');
+    wrap.innerHTML = '<p class="tp-loading">Loading leaderboard...</p>';
+
+    var { data, error } = await supabase
+      .from('submissions')
+      .select('id, name, hours, minutes, seconds, total_seconds, photo_url')
+      .eq('status', 'approved')
+      .order('total_seconds', { ascending: true });
+
+    if (error || !data) {
+      wrap.innerHTML = '<p class="tp-empty">Could not load leaderboard.</p>';
+      return;
+    }
+
+    if (data.length === 0) {
+      wrap.innerHTML = '<div class="tp-empty"><p>No approved submissions yet. Be the first!</p></div>';
+      return;
+    }
+
+    var html = '<table class="tp-table"><thead><tr>';
+    html += '<th class="tp-rank">#</th><th class="tp-col-photo"></th><th>Name</th><th class="tp-col-time">Time</th>';
+    html += '</tr></thead><tbody>';
+
+    data.forEach(function(s, i) {
+      var rank;
+      if (i === 0) rank = '<span class="tp-medal tp-gold">1</span>';
+      else if (i === 1) rank = '<span class="tp-medal tp-silver">2</span>';
+      else if (i === 2) rank = '<span class="tp-medal tp-bronze">3</span>';
+      else rank = (i + 1);
+
+      var photo;
+      if (s.photo_url) {
+        photo = '<img src="' + s.photo_url + '" alt="" class="tp-avatar" loading="lazy">';
+      } else {
+        photo = '<span class="tp-avatar-ph">' + s.name.charAt(0).toUpperCase() + '</span>';
+      }
+
+      var time = pad(s.hours) + ':' + pad(s.minutes) + ':' + pad(s.seconds);
+
+      html += '<tr><td class="tp-rank">' + rank + '</td>';
+      html += '<td class="tp-col-photo">' + photo + '</td>';
+      html += '<td>' + escHtml(s.name) + '</td>';
+      html += '<td><span class="tp-time">' + time + '</span></td></tr>';
+    });
+
+    html += '</tbody></table>';
+    wrap.innerHTML = html;
+  }
+
+  // Handle form submission
+  document.getElementById('tp-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    var btn = document.getElementById('tp-submit-btn');
+    var errEl = document.getElementById('tp-form-error');
+    errEl.style.display = 'none';
+    btn.disabled = true;
+    btn.textContent = 'Submitting...';
+
+    try {
+      var name = document.getElementById('tp-name').value.trim();
+      var email = document.getElementById('tp-email').value.trim();
+      var hours = parseInt(document.getElementById('tp-hours').value, 10);
+      var minutes = parseInt(document.getElementById('tp-minutes').value, 10);
+      var seconds = parseInt(document.getElementById('tp-seconds').value, 10);
+
+      if (!name || !email || isNaN(hours) || isNaN(minutes) || isNaN(seconds)) {
+        throw new Error('Please fill in all required fields.');
+      }
+      if (minutes > 59 || seconds > 59 || hours < 0 || minutes < 0 || seconds < 0) {
+        throw new Error('Please enter a valid time.');
+      }
+
+      var totalSeconds = hours * 3600 + minutes * 60 + seconds;
+      var photoUrl = null;
+
+      // Upload photo if provided
+      var photoInput = document.getElementById('tp-photo');
+      if (photoInput.files && photoInput.files[0]) {
+        var file = photoInput.files[0];
+        if (file.size > 10 * 1024 * 1024) throw new Error('Photo must be under 10MB.');
+
+        var ext = file.name.split('.').pop();
+        var fileName = Date.now() + '-' + Math.random().toString(36).substr(2, 9) + '.' + ext;
+
+        var { error: uploadErr } = await supabase.storage
+          .from('photos')
+          .upload(fileName, file);
+
+        if (uploadErr) throw new Error('Photo upload failed: ' + uploadErr.message);
+
+        var { data: urlData } = supabase.storage.from('photos').getPublicUrl(fileName);
+        photoUrl = urlData.publicUrl;
+      }
+
+      // Insert submission
+      var { error: insertErr } = await supabase.from('submissions').insert({
+        name: name,
+        email: email,
+        hours: hours,
+        minutes: minutes,
+        seconds: seconds,
+        total_seconds: totalSeconds,
+        photo_url: photoUrl,
+        status: 'pending'
+      });
+
+      if (insertErr) throw new Error('Submission failed: ' + insertErr.message);
+
+      // Show success
+      document.getElementById('tp-form').style.display = 'none';
+      document.getElementById('tp-success').style.display = '';
+
+    } catch (err) {
+      errEl.textContent = err.message;
+      errEl.style.display = '';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Submit Entry';
+    }
+  });
+
+  // File name display
+  document.getElementById('tp-photo').addEventListener('change', function() {
+    document.getElementById('tp-file-name').textContent =
+      this.files[0] ? this.files[0].name : 'Click to upload a photo';
+  });
+
+  // Helpers
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function escHtml(s) {
+    var d = document.createElement('div');
+    d.appendChild(document.createTextNode(s));
+    return d.innerHTML;
+  }
+
+  // Initial load
+  loadLeaderboard();
+})();
+</script>

@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= typeof title !== 'undefined' ? title + ' | ' : '' %>Three Peaks Challenge</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="container nav-container">
+      <a href="/" class="nav-brand">
+        <span class="nav-icon">&#9968;</span> Three Peaks Challenge
+      </a>
+      <div class="nav-links">
+        <a href="/">Leaderboard</a>
+        <a href="/submit" class="btn btn-sm btn-accent">Submit Time</a>
+        <% if (isAdmin) { %>
+          <a href="/admin">Admin</a>
+          <a href="/admin/logout">Logout</a>
+        <% } %>
+      </div>
+    </div>
+  </nav>
+  <main class="container">

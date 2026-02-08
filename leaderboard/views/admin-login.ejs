@@ -1,0 +1,23 @@
+<%- include('partials/head', { title: 'Admin Login' }) %>
+
+<section class="form-section form-narrow">
+  <h2 class="section-title">Admin Login</h2>
+
+  <% if (error) { %>
+    <div class="alert alert-error"><%= error %></div>
+  <% } %>
+
+  <form action="/admin/login" method="POST" class="submit-form">
+    <div class="form-group">
+      <label for="email">Email</label>
+      <input type="email" id="email" name="email" required>
+    </div>
+    <div class="form-group">
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" required>
+    </div>
+    <button type="submit" class="btn btn-primary btn-lg btn-block">Log In</button>
+  </form>
+</section>
+
+<%- include('partials/foot') %>

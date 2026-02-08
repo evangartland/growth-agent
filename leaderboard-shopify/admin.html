@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Three Peaks Admin</title>
+  <style>
+    :root {
+      --primary: #1a5276;
+      --primary-light: #2e86c1;
+      --success: #27ae60;
+      --danger: #e74c3c;
+      --bg: #f0f4f8;
+      --card: #fff;
+      --text: #2c3e50;
+      --text-light: #7f8c8d;
+      --border: #dce1e6;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    .header {
+      background: linear-gradient(135deg, var(--primary), var(--primary-light));
+      padding: 1rem;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .header h1 { font-size: 1.2rem; font-weight: 700; }
+    .header button {
+      background: rgba(255,255,255,0.2);
+      color: #fff;
+      border: none;
+      padding: 0.4rem 1rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 1.5rem 1rem;
+    }
+
+    /* Login */
+    .login-wrap {
+      max-width: 380px;
+      margin: 4rem auto;
+      background: var(--card);
+      padding: 2rem;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+
+    .login-wrap h2 {
+      text-align: center;
+      color: var(--primary);
+      margin-bottom: 1.5rem;
+    }
+
+    .field { margin-bottom: 1rem; }
+    .field label { display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.3rem; }
+    .field input {
+      width: 100%;
+      padding: 0.6rem 0.8rem;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 1rem;
+    }
+    .field input:focus { outline: none; border-color: var(--primary-light); box-shadow: 0 0 0 3px rgba(46,134,193,0.15); }
+
+    .btn {
+      padding: 0.6rem 1.2rem;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--primary-light); }
+    .btn-success { background: var(--success); color: #fff; }
+    .btn-success:hover { background: #219a52; }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .btn-danger:hover { background: #c0392b; }
+    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-light); }
+    .btn-outline:hover { background: var(--bg); }
+    .btn-block { display: block; width: 100%; }
+    .btn-sm { padding: 0.35rem 0.8rem; font-size: 0.8rem; }
+
+    .error-msg { color: var(--danger); font-size: 0.9rem; margin-bottom: 0.75rem; text-align: center; }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 0.4rem;
+      margin-bottom: 1.25rem;
+      flex-wrap: wrap;
+    }
+
+    .tab {
+      padding: 0.5rem 1.1rem;
+      border-radius: 20px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      border: 1.5px solid var(--border);
+      background: var(--card);
+      color: var(--text-light);
+      transition: all 0.2s;
+    }
+    .tab:hover { border-color: var(--primary-light); color: var(--primary); }
+    .tab-active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+    .badge {
+      background: rgba(0,0,0,0.12);
+      padding: 0.05rem 0.45rem;
+      border-radius: 10px;
+      font-size: 0.75rem;
+      margin-left: 0.2rem;
+    }
+    .tab-active .badge { background: rgba(255,255,255,0.25); }
+
+    /* Cards */
+    .card {
+      background: var(--card);
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+      padding: 1.2rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .card-top {
+      display: flex;
+      gap: 1rem;
+      align-items: flex-start;
+    }
+
+    .card-photo {
+      width: 70px;
+      height: 70px;
+      border-radius: 8px;
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+
+    .card-info h3 { font-size: 1.05rem; margin-bottom: 0.1rem; }
+    .card-email { color: var(--text-light); font-size: 0.82rem; }
+    .card-time { margin-top: 0.2rem; font-size: 0.9rem; }
+    .card-date { font-size: 0.78rem; color: var(--text-light); margin-top: 0.1rem; }
+
+    .card-actions {
+      display: flex;
+      gap: 0.4rem;
+      margin-top: 0.8rem;
+      padding-top: 0.8rem;
+      border-top: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+
+    .empty { text-align: center; padding: 2.5rem; color: var(--text-light); }
+
+    @media (max-width: 600px) {
+      .card-photo { width: 50px; height: 50px; }
+      .container { padding: 1rem 0.75rem; }
+    }
+  </style>
+</head>
+<body>
+  <!-- LOGIN SCREEN -->
+  <div id="login-screen">
+    <div class="login-wrap">
+      <h2>&#9968; Admin Login</h2>
+      <div id="login-error" class="error-msg" style="display:none;"></div>
+      <form id="login-form">
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="login-email" required>
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input type="password" id="login-password" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" id="login-btn">Log In</button>
+      </form>
+      <p style="margin-top:1rem;font-size:0.8rem;color:#7f8c8d;text-align:center;">
+        Create your admin user in Supabase → Authentication → Users
+      </p>
+    </div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="dashboard-screen" style="display:none;">
+    <div class="header">
+      <h1>&#9968; Three Peaks Admin</h1>
+      <button onclick="logout()">Log Out</button>
+    </div>
+    <div class="container">
+      <div class="tabs" id="tabs"></div>
+      <div id="cards"></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script>
+    // =============================================
+    // CONFIGURE THESE TWO VALUES
+    // =============================================
+    const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+    const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+    // =============================================
+
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    let currentFilter = 'pending';
+    let counts = { pending: 0, approved: 0, rejected: 0 };
+
+    // Check existing session
+    (async function init() {
+      const { data: { session } } = await sb.auth.getSession();
+      if (session) showDashboard();
+    })();
+
+    // Login
+    document.getElementById('login-form').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const errEl = document.getElementById('login-error');
+      const btn = document.getElementById('login-btn');
+      errEl.style.display = 'none';
+      btn.disabled = true;
+      btn.textContent = 'Logging in...';
+
+      const { error } = await sb.auth.signInWithPassword({
+        email: document.getElementById('login-email').value,
+        password: document.getElementById('login-password').value
+      });
+
+      if (error) {
+        errEl.textContent = error.message;
+        errEl.style.display = '';
+        btn.disabled = false;
+        btn.textContent = 'Log In';
+        return;
+      }
+
+      showDashboard();
+    });
+
+    async function logout() {
+      await sb.auth.signOut();
+      document.getElementById('dashboard-screen').style.display = 'none';
+      document.getElementById('login-screen').style.display = '';
+    }
+
+    function showDashboard() {
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('dashboard-screen').style.display = '';
+      loadSubmissions();
+    }
+
+    async function loadSubmissions() {
+      // Get counts
+      for (const s of ['pending', 'approved', 'rejected']) {
+        const { count } = await sb.from('submissions').select('*', { count: 'exact', head: true }).eq('status', s);
+        counts[s] = count || 0;
+      }
+
+      renderTabs();
+
+      const { data, error } = await sb.from('submissions')
+        .select('*')
+        .eq('status', currentFilter)
+        .order('created_at', { ascending: false });
+
+      const wrap = document.getElementById('cards');
+
+      if (error || !data) {
+        wrap.innerHTML = '<div class="empty">Failed to load submissions.</div>';
+        return;
+      }
+
+      if (data.length === 0) {
+        wrap.innerHTML = '<div class="empty">No ' + currentFilter + ' submissions.</div>';
+        return;
+      }
+
+      wrap.innerHTML = data.map(function(s) {
+        const time = pad(s.hours) + ':' + pad(s.minutes) + ':' + pad(s.seconds);
+        const date = new Date(s.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+        let photo = '';
+        if (s.photo_url) {
+          photo = '<img src="' + esc(s.photo_url) + '" class="card-photo" loading="lazy">';
+        }
+
+        let actions = '';
+        if (currentFilter === 'pending') {
+          actions += '<button class="btn btn-success btn-sm" onclick="doAction(' + s.id + ',\'approved\')">Approve</button>';
+          actions += '<button class="btn btn-danger btn-sm" onclick="doAction(' + s.id + ',\'rejected\')">Reject</button>';
+        }
+        actions += '<button class="btn btn-outline btn-sm" onclick="doDelete(' + s.id + ')">Delete</button>';
+
+        return '<div class="card"><div class="card-top">' + photo +
+          '<div class="card-info"><h3>' + esc(s.name) + '</h3>' +
+          '<p class="card-email">' + esc(s.email) + '</p>' +
+          '<p class="card-time">Time: <strong>' + time + '</strong></p>' +
+          '<p class="card-date">Submitted: ' + date + '</p></div></div>' +
+          '<div class="card-actions">' + actions + '</div></div>';
+      }).join('');
+    }
+
+    function renderTabs() {
+      const wrap = document.getElementById('tabs');
+      wrap.innerHTML = ['pending', 'approved', 'rejected'].map(function(s) {
+        const active = s === currentFilter ? ' tab-active' : '';
+        const label = s.charAt(0).toUpperCase() + s.slice(1);
+        return '<button class="tab' + active + '" onclick="setFilter(\'' + s + '\')">' +
+          label + ' <span class="badge">' + counts[s] + '</span></button>';
+      }).join('');
+    }
+
+    window.setFilter = function(f) {
+      currentFilter = f;
+      loadSubmissions();
+    };
+
+    window.doAction = async function(id, status) {
+      await sb.from('submissions').update({ status: status, reviewed_at: new Date().toISOString() }).eq('id', id);
+      loadSubmissions();
+    };
+
+    window.doDelete = async function(id) {
+      if (!confirm('Permanently delete this submission?')) return;
+      await sb.from('submissions').delete().eq('id', id);
+      loadSubmissions();
+    };
+
+    function pad(n) { return String(n).padStart(2, '0'); }
+    function esc(s) {
+      const d = document.createElement('div');
+      d.appendChild(document.createTextNode(s));
+      return d.innerHTML;
+    }
+  </script>
+</body>
+</html>

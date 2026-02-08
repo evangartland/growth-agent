@@ -27,3 +27,9 @@ error_log.txt
 # OS
 .DS_Store
 Thumbs.db
+
+# Leaderboard app
+leaderboard/node_modules/
+leaderboard/data/
+leaderboard/public/uploads/*
+!leaderboard/public/uploads/.gitkeep

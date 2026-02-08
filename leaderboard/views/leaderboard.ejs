@@ -1,0 +1,62 @@
+<%- include('partials/head', { title: 'Leaderboard' }) %>
+
+<section class="hero">
+  <h1>Three Peaks Challenge</h1>
+  <p class="hero-sub">Ben Nevis &bull; Scafell Pike &bull; Snowdon</p>
+  <a href="/submit" class="btn btn-accent btn-lg">Submit Your Time</a>
+</section>
+
+<section class="leaderboard-section">
+  <h2 class="section-title">Leaderboard</h2>
+
+  <% if (submissions.length === 0) { %>
+    <div class="empty-state">
+      <p>No approved submissions yet. Be the first!</p>
+    </div>
+  <% } else { %>
+    <div class="leaderboard-table-wrap">
+      <table class="leaderboard-table">
+        <thead>
+          <tr>
+            <th class="col-rank">#</th>
+            <th class="col-photo"></th>
+            <th class="col-name">Name</th>
+            <th class="col-time">Time</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% submissions.forEach((s, i) => { %>
+            <tr class="<%= i < 3 ? 'top-three rank-' + (i + 1) : '' %>">
+              <td class="col-rank">
+                <% if (i === 0) { %>
+                  <span class="medal gold">1</span>
+                <% } else if (i === 1) { %>
+                  <span class="medal silver">2</span>
+                <% } else if (i === 2) { %>
+                  <span class="medal bronze">3</span>
+                <% } else { %>
+                  <%= i + 1 %>
+                <% } %>
+              </td>
+              <td class="col-photo">
+                <% if (s.photo_path) { %>
+                  <img src="/uploads/<%= s.photo_path %>" alt="<%= s.name %>" class="avatar" loading="lazy">
+                <% } else { %>
+                  <div class="avatar avatar-placeholder"><%= s.name.charAt(0).toUpperCase() %></div>
+                <% } %>
+              </td>
+              <td class="col-name"><%= s.name %></td>
+              <td class="col-time">
+                <span class="time-display">
+                  <%= String(s.hours).padStart(2, '0') %>:<%= String(s.minutes).padStart(2, '0') %>:<%= String(s.seconds).padStart(2, '0') %>
+                </span>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</section>
+
+<%- include('partials/foot') %>

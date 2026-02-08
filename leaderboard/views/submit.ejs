@@ -1,0 +1,77 @@
+<%- include('partials/head', { title: 'Submit Your Time' }) %>
+
+<section class="form-section">
+  <h2 class="section-title">Submit Your Time</h2>
+  <p class="section-desc">Completed the Three Peaks Challenge? Submit your details below. Your entry will be reviewed before appearing on the leaderboard.</p>
+
+  <% if (success) { %>
+    <div class="alert alert-success">
+      Your submission has been received and is pending approval. You'll receive an email once it's been reviewed. Thank you!
+    </div>
+    <div style="text-align: center; margin-top: 1.5rem;">
+      <a href="/" class="btn btn-primary">View Leaderboard</a>
+    </div>
+  <% } else { %>
+
+    <% if (error) { %>
+      <div class="alert alert-error"><%= error %></div>
+    <% } %>
+
+    <form action="/submit" method="POST" enctype="multipart/form-data" class="submit-form">
+      <div class="form-group">
+        <label for="name">Full Name</label>
+        <input type="text" id="name" name="name" required placeholder="e.g. Alex Johnson">
+      </div>
+
+      <div class="form-group">
+        <label for="email">Email Address</label>
+        <input type="email" id="email" name="email" required placeholder="you@example.com">
+      </div>
+
+      <div class="form-group">
+        <label>Completion Time</label>
+        <div class="time-inputs">
+          <div class="time-field">
+            <input type="number" name="hours" min="0" max="99" required placeholder="HH">
+            <span class="time-label">hrs</span>
+          </div>
+          <span class="time-sep">:</span>
+          <div class="time-field">
+            <input type="number" name="minutes" min="0" max="59" required placeholder="MM">
+            <span class="time-label">min</span>
+          </div>
+          <span class="time-sep">:</span>
+          <div class="time-field">
+            <input type="number" name="seconds" min="0" max="59" required placeholder="SS">
+            <span class="time-label">sec</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="photo">Photo (optional, max 10MB)</label>
+        <div class="file-upload" id="file-upload">
+          <input type="file" id="photo" name="photo" accept="image/jpeg,image/png,image/webp">
+          <div class="file-upload-text">
+            <span class="file-upload-icon">&#128247;</span>
+            <span id="file-name">Click or drag to upload a photo</span>
+          </div>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-lg btn-block">Submit Entry</button>
+    </form>
+  <% } %>
+</section>
+
+<script>
+  const fileInput = document.getElementById('photo');
+  const fileName = document.getElementById('file-name');
+  if (fileInput) {
+    fileInput.addEventListener('change', () => {
+      fileName.textContent = fileInput.files[0] ? fileInput.files[0].name : 'Click or drag to upload a photo';
+    });
+  }
+</script>
+
+<%- include('partials/foot') %>

@@ -1,0 +1,59 @@
+<%- include('partials/head', { title: 'Admin Dashboard' }) %>
+
+<section class="admin-section">
+  <h2 class="section-title">Admin Dashboard</h2>
+
+  <div class="filter-tabs">
+    <a href="/admin?filter=pending" class="filter-tab <%= activeFilter === 'pending' ? 'active' : '' %>">
+      Pending <span class="badge"><%= counts.pending %></span>
+    </a>
+    <a href="/admin?filter=approved" class="filter-tab <%= activeFilter === 'approved' ? 'active' : '' %>">
+      Approved <span class="badge"><%= counts.approved %></span>
+    </a>
+    <a href="/admin?filter=rejected" class="filter-tab <%= activeFilter === 'rejected' ? 'active' : '' %>">
+      Rejected <span class="badge"><%= counts.rejected %></span>
+    </a>
+  </div>
+
+  <% if (submissions.length === 0) { %>
+    <div class="empty-state">
+      <p>No <%= activeFilter %> submissions.</p>
+    </div>
+  <% } else { %>
+    <div class="admin-cards">
+      <% submissions.forEach(s => { %>
+        <div class="admin-card">
+          <div class="admin-card-header">
+            <% if (s.photo_path) { %>
+              <img src="/uploads/<%= s.photo_path %>" alt="<%= s.name %>" class="admin-photo" loading="lazy">
+            <% } %>
+            <div class="admin-card-info">
+              <h3><%= s.name %></h3>
+              <p class="admin-email"><%= s.email %></p>
+              <p class="admin-time">
+                Time: <strong><%= String(s.hours).padStart(2, '0') %>:<%= String(s.minutes).padStart(2, '0') %>:<%= String(s.seconds).padStart(2, '0') %></strong>
+              </p>
+              <p class="admin-date">Submitted: <%= new Date(s.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) %></p>
+            </div>
+          </div>
+          <div class="admin-card-actions">
+            <% if (activeFilter === 'pending') { %>
+              <form action="/admin/approve/<%= s.id %>" method="POST" style="display:inline">
+                <button type="submit" class="btn btn-success btn-sm">Approve</button>
+              </form>
+              <form action="/admin/reject/<%= s.id %>" method="POST" style="display:inline">
+                <button type="submit" class="btn btn-danger btn-sm">Reject</button>
+              </form>
+            <% } %>
+            <form action="/admin/delete/<%= s.id %>" method="POST" style="display:inline"
+                  onsubmit="return confirm('Permanently delete this submission?')">
+              <button type="submit" class="btn btn-outline btn-sm">Delete</button>
+            </form>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+  <% } %>
+</section>
+
+<%- include('partials/foot') %>
